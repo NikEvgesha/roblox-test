@@ -1,1 +1,0 @@
-print("[Server] bootstrap loaded")

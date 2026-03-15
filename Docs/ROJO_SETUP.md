@@ -39,7 +39,7 @@ rojo serve
 1. Server script files: `*.server.lua`
 2. Client script files: `*.client.lua`
 3. Module files: `*.lua`
-4. Shared package root: `src/shared/init.lua`
+4. Do not use `init.*` files directly in a root folder that is mapped to a fixed Roblox service.
 
 ## Team Rules
 
