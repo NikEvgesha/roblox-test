@@ -1,11 +1,17 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UserInputService = game:GetService("UserInputService")
+local Workspace = game:GetService("Workspace")
 
 local OPEN_DIALOG_EVENT_NAME = "OpenNpcDialog"
 local DIALOG_CHOICE_EVENT_NAME = "NpcDialogChoice"
+local COMBAT_ACTION_EVENT_NAME = "CombatAction"
+local COMBAT_STATE_EVENT_NAME = "CombatState"
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
+local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
+local combatConfig = require(sharedFolder:WaitForChild("CombatConfig"))
 
 local legacyGui = playerGui:FindFirstChild("NpcDialogGui")
 if legacyGui and legacyGui:IsA("ScreenGui") then
@@ -14,6 +20,8 @@ end
 
 local openDialogEvent = ReplicatedStorage:WaitForChild(OPEN_DIALOG_EVENT_NAME)
 local dialogChoiceEvent = ReplicatedStorage:WaitForChild(DIALOG_CHOICE_EVENT_NAME)
+local combatActionEvent = ReplicatedStorage:WaitForChild(COMBAT_ACTION_EVENT_NAME)
+local combatStateEvent = ReplicatedStorage:WaitForChild(COMBAT_STATE_EVENT_NAME)
 
 local gui = Instance.new("ScreenGui")
 gui.Name = "NpcDialogRojoGui"
@@ -25,7 +33,7 @@ local moneyLabel = Instance.new("TextLabel")
 moneyLabel.Name = "MoneyLabel"
 moneyLabel.AnchorPoint = Vector2.new(0, 0)
 moneyLabel.Position = UDim2.fromOffset(18, 18)
-moneyLabel.Size = UDim2.fromOffset(220, 36)
+moneyLabel.Size = UDim2.fromOffset(250, 36)
 moneyLabel.BackgroundColor3 = Color3.fromRGB(18, 18, 18)
 moneyLabel.BackgroundTransparency = 0.2
 moneyLabel.TextColor3 = Color3.fromRGB(255, 224, 102)
@@ -38,6 +46,55 @@ moneyLabel.Parent = gui
 local moneyCorner = Instance.new("UICorner")
 moneyCorner.CornerRadius = UDim.new(0, 8)
 moneyCorner.Parent = moneyLabel
+
+local ammoLabel = Instance.new("TextLabel")
+ammoLabel.Name = "AmmoLabel"
+ammoLabel.AnchorPoint = Vector2.new(0, 0)
+ammoLabel.Position = UDim2.fromOffset(18, 58)
+ammoLabel.Size = UDim2.fromOffset(320, 34)
+ammoLabel.BackgroundColor3 = Color3.fromRGB(18, 18, 18)
+ammoLabel.BackgroundTransparency = 0.2
+ammoLabel.TextColor3 = Color3.fromRGB(198, 224, 255)
+ammoLabel.Font = Enum.Font.GothamBold
+ammoLabel.TextSize = 18
+ammoLabel.TextXAlignment = Enum.TextXAlignment.Left
+ammoLabel.Text = "Патроны: 0 / 0"
+ammoLabel.Parent = gui
+
+local ammoCorner = Instance.new("UICorner")
+ammoCorner.CornerRadius = UDim.new(0, 8)
+ammoCorner.Parent = ammoLabel
+
+local weaponLabel = Instance.new("TextLabel")
+weaponLabel.Name = "WeaponLabel"
+weaponLabel.AnchorPoint = Vector2.new(0, 0)
+weaponLabel.Position = UDim2.fromOffset(18, 95)
+weaponLabel.Size = UDim2.fromOffset(320, 30)
+weaponLabel.BackgroundColor3 = Color3.fromRGB(18, 18, 18)
+weaponLabel.BackgroundTransparency = 0.3
+weaponLabel.TextColor3 = Color3.fromRGB(233, 233, 233)
+weaponLabel.Font = Enum.Font.Gotham
+weaponLabel.TextSize = 16
+weaponLabel.TextXAlignment = Enum.TextXAlignment.Left
+weaponLabel.Text = "Оружие: Нет"
+weaponLabel.Parent = gui
+
+local weaponCorner = Instance.new("UICorner")
+weaponCorner.CornerRadius = UDim.new(0, 8)
+weaponCorner.Parent = weaponLabel
+
+local controlsLabel = Instance.new("TextLabel")
+controlsLabel.Name = "ControlsLabel"
+controlsLabel.AnchorPoint = Vector2.new(0, 0)
+controlsLabel.Position = UDim2.fromOffset(18, 128)
+controlsLabel.Size = UDim2.fromOffset(420, 26)
+controlsLabel.BackgroundTransparency = 1
+controlsLabel.TextColor3 = Color3.fromRGB(190, 190, 190)
+controlsLabel.Font = Enum.Font.Gotham
+controlsLabel.TextSize = 14
+controlsLabel.TextXAlignment = Enum.TextXAlignment.Left
+controlsLabel.Text = "Подсказка: E с Noob, ЛКМ стрелять/бить, R перезарядка"
+controlsLabel.Parent = gui
 
 local dialogFrame = Instance.new("Frame")
 dialogFrame.Name = "DialogFrame"
@@ -93,6 +150,63 @@ listLayout.VerticalAlignment = Enum.VerticalAlignment.Center
 listLayout.Padding = UDim.new(0, 8)
 listLayout.Parent = choicesFrame
 
+local equippedWeapon = "None"
+local ammoMag = 0
+local ammoReserve = 0
+local isReloading = false
+local swordComboToggle = false
+
+local swordSlashAnimation = Instance.new("Animation")
+swordSlashAnimation.AnimationId = combatConfig.Sword.SlashAnimationId
+
+local swordLungeAnimation = Instance.new("Animation")
+swordLungeAnimation.AnimationId = combatConfig.Sword.LungeAnimationId
+
+local function refreshCombatHud()
+	local prettyWeapon = "Нет"
+	if equippedWeapon == combatConfig.Gun.ToolName then
+		prettyWeapon = "Пистолет"
+	elseif equippedWeapon == combatConfig.Sword.ToolName then
+		prettyWeapon = "Меч"
+	end
+
+	weaponLabel.Text = ("Оружие: %s"):format(prettyWeapon)
+	local suffix = isReloading and " (перезарядка...)" or ""
+	ammoLabel.Text = ("Патроны: %d / %d%s"):format(ammoMag, ammoReserve, suffix)
+
+	if equippedWeapon == combatConfig.Gun.ToolName then
+		controlsLabel.Text = "ЛКМ: выстрел | R: перезарядка | E: диалог с Noob"
+	elseif equippedWeapon == combatConfig.Sword.ToolName then
+		controlsLabel.Text = "ЛКМ: удар мечом | E: диалог с Noob"
+	else
+		controlsLabel.Text = "Выбери Пистолет или Меч в инвентаре | E: диалог с Noob"
+	end
+end
+
+local function refreshMoneyLabel()
+	local leaderstats = player:FindFirstChild("leaderstats")
+	if not leaderstats then
+		moneyLabel.Text = "Деньги: 0$"
+		return
+	end
+
+	local money = leaderstats:FindFirstChild("Money")
+	if not money then
+		moneyLabel.Text = "Деньги: 0$"
+		return
+	end
+
+	moneyLabel.Text = ("Деньги: %d$"):format(money.Value)
+end
+
+local function bindMoneyListeners()
+	local leaderstats = player:WaitForChild("leaderstats")
+	local money = leaderstats:WaitForChild("Money")
+
+	refreshMoneyLabel()
+	money:GetPropertyChangedSignal("Value"):Connect(refreshMoneyLabel)
+end
+
 local function clearChoices()
 	for _, child in ipairs(choicesFrame:GetChildren()) do
 		if child:IsA("TextButton") then
@@ -127,31 +241,103 @@ local function addChoiceButton(choiceData)
 	end)
 end
 
-local function refreshMoneyLabel()
-	local leaderstats = player:FindFirstChild("leaderstats")
-	if not leaderstats then
-		moneyLabel.Text = "Деньги: 0$"
+local function updateEquippedWeaponFromCharacter(character)
+	if not character then
+		equippedWeapon = "None"
+		refreshCombatHud()
 		return
 	end
 
-	local money = leaderstats:FindFirstChild("Money")
-	if not money then
-		moneyLabel.Text = "Деньги: 0$"
+	if character:FindFirstChild(combatConfig.Gun.ToolName) then
+		equippedWeapon = combatConfig.Gun.ToolName
+	elseif character:FindFirstChild(combatConfig.Sword.ToolName) then
+		equippedWeapon = combatConfig.Sword.ToolName
+	else
+		equippedWeapon = "None"
+	end
+
+	refreshCombatHud()
+end
+
+local function bindCharacter(character)
+	updateEquippedWeaponFromCharacter(character)
+
+	character.ChildAdded:Connect(function(child)
+		if child:IsA("Tool") then
+			updateEquippedWeaponFromCharacter(character)
+		end
+	end)
+
+	character.ChildRemoved:Connect(function(child)
+		if child:IsA("Tool") then
+			updateEquippedWeaponFromCharacter(character)
+		end
+	end)
+end
+
+local function playSwordAnimation()
+	local character = player.Character
+	if not character then
 		return
 	end
 
-	moneyLabel.Text = ("Деньги: %d$"):format(money.Value)
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	if not humanoid then
+		return
+	end
+
+	local animationToPlay = swordSlashAnimation
+	if swordComboToggle then
+		animationToPlay = swordLungeAnimation
+	end
+	swordComboToggle = not swordComboToggle
+
+	local track = humanoid:LoadAnimation(animationToPlay)
+	track.Priority = Enum.AnimationPriority.Action
+	track:Play(0.05, 1, 1.05)
 end
 
-local function bindMoneyListeners()
-	local leaderstats = player:WaitForChild("leaderstats")
-	local money = leaderstats:WaitForChild("Money")
+local mouse = player:GetMouse()
+mouse.Button1Down:Connect(function()
+	if dialogFrame.Visible then
+		return
+	end
 
-	refreshMoneyLabel()
-	money:GetPropertyChangedSignal("Value"):Connect(refreshMoneyLabel)
-end
+	if equippedWeapon == combatConfig.Gun.ToolName then
+		local camera = Workspace.CurrentCamera
+		if not camera then
+			return
+		end
 
-task.spawn(bindMoneyListeners)
+		local origin = camera.CFrame.Position
+		local direction = mouse.Hit.Position - origin
+		if direction.Magnitude < 0.01 then
+			direction = camera.CFrame.LookVector
+		end
+
+		combatActionEvent:FireServer("shoot", {
+			origin = origin,
+			direction = direction,
+		})
+	elseif equippedWeapon == combatConfig.Sword.ToolName then
+		playSwordAnimation()
+		combatActionEvent:FireServer("swing")
+	end
+end)
+
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+	if gameProcessed then
+		return
+	end
+
+	if dialogFrame.Visible then
+		return
+	end
+
+	if input.KeyCode == Enum.KeyCode.R and equippedWeapon == combatConfig.Gun.ToolName then
+		combatActionEvent:FireServer("reload")
+	end
+end)
 
 openDialogEvent.OnClientEvent:Connect(function(data)
 	if not data then
@@ -173,3 +359,36 @@ openDialogEvent.OnClientEvent:Connect(function(data)
 		addChoiceButton(choiceData)
 	end
 end)
+
+combatStateEvent.OnClientEvent:Connect(function(data)
+	if typeof(data) ~= "table" then
+		return
+	end
+
+	if typeof(data.mag) == "number" then
+		ammoMag = math.max(0, math.floor(data.mag))
+	end
+
+	if typeof(data.reserve) == "number" then
+		ammoReserve = math.max(0, math.floor(data.reserve))
+	end
+
+	if typeof(data.reloading) == "boolean" then
+		isReloading = data.reloading
+	end
+
+	if typeof(data.equipped) == "string" then
+		equippedWeapon = data.equipped
+	end
+
+	refreshCombatHud()
+end)
+
+task.spawn(bindMoneyListeners)
+
+if player.Character then
+	bindCharacter(player.Character)
+end
+player.CharacterAdded:Connect(bindCharacter)
+
+refreshCombatHud()

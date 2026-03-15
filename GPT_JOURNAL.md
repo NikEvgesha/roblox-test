@@ -61,3 +61,24 @@ Project path: `E:\GitFork\RobloxProject`
 - Verification:
   - docs index references new files;
   - TODO includes Linear-backed queue and quality/release/conflict gates.
+
+### 2026-03-15 (Combat prototype: pistol + sword + ammo UI)
+
+- What changed:
+  - added server combat system in `src/server/combat.server.lua`:
+    - tool loadout (`Pistol`, `Sword`),
+    - shooting/reload/sword-hit actions via remotes,
+    - ammo pickups spawned around players,
+    - tracer + damage handling + weapon/pickup sounds.
+  - added shared tuning config `src/shared/CombatConfig.lua`.
+  - extended client HUD and input in `src/client/main.client.lua`:
+    - ammo in mag/reserve display,
+    - current equipped weapon label,
+    - `LMB` for fire/swing and `R` for reload,
+    - sword attack animation playback.
+- Why it matters:
+  - playable combat loop now exists for testing agent-driven feature delivery.
+- Verification:
+  - in Play test: ammo changed after shoot/reload (`12/36` -> `11/36` -> `12/35`);
+  - tools visible in Backpack;
+  - ammo pickups spawned near player (`Workspace.AmmoPickups` had active items).
