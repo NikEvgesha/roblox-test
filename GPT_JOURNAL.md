@@ -39,3 +39,25 @@ Project path: `E:\GitFork\RobloxProject`
   - each developer runs `aftman install` and validates `rojo serve` connection from Studio plugin.
 - Verification:
   - repository contains renamed script files and updated setup docs.
+
+### 2026-03-15 (Docs workflow completion)
+
+- What changed:
+  - added feature docs set:
+    - `Docs/GAMEPLAY_LOOP_SYSTEM_SPEC.md`
+    - `Docs/GAMEPLAY_LOOP_SYSTEM_SETUP.md`
+    - `Docs/GAMEPLAY_LOOP_TEST_PLAN.md`
+  - added process runbooks:
+    - `Docs/TEAM_RULES.md`
+    - `Docs/RELEASE_CHECKLIST.md`
+  - synchronized `TODO.md` with active Linear queue (`IGR-5` to `IGR-9` top block);
+  - updated `START_PROMPT.md`, `Docs/README.md`, and `Docs/LINEAR_WORKFLOW.md`.
+- Why it matters:
+  - required DocksForCodex structure is now present for first critical system;
+  - daily cycle, quality gate, release, and conflict policies are explicitly documented.
+- What is next:
+  - move `IGR-5` to `In Progress` and complete onboarding verification for all 3 developers;
+  - start implementation from `IGR-7` after onboarding closure.
+- Verification:
+  - docs index references new files;
+  - TODO includes Linear-backed queue and quality/release/conflict gates.
