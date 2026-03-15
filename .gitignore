@@ -1,1 +1,14 @@
+# Roblox binary/place/model exports are not merge-friendly.
+*.rbxl
+*.rbxlx
+*.rbxm
+*.rbxmx
 
+# Local/editor artifacts
+*.log
+*.tmp
+.DS_Store
+Thumbs.db
+
+# Optional local settings
+.vscode/settings.local.json

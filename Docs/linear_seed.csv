@@ -1,0 +1,13 @@
+Title,Description,Priority,State,Labels
+Define game loop spec,"Spawn -> objective -> reward -> repeat. Add success/failure conditions.",1,Backlog,"shared"
+Implement server round state machine,"Authoritative round flow on server with reset guards.",1,Backlog,"server"
+Implement client HUD for round state,"Round timer/status/progress widgets.",2,Backlog,"client,ui"
+Implement reward distribution and progression,"Grant rewards at round end and persist progression.",1,Backlog,"server,shared"
+Create remote contract document,"List all remotes with payload schema and owner side.",1,Backlog,"shared,infra"
+Add shared payload validation,"Reject malformed payloads before executing handlers.",1,Backlog,"server,shared"
+Implement anti-exploit checks,"Rate limits and server ownership checks for sensitive actions.",1,Backlog,"server"
+Implement DataStore wrapper,"Load/save wrapper with retries and error metadata.",1,Backlog,"server,infra"
+Build prototype map,"Playable graybox map with core traversal path.",2,Backlog,"world"
+Set spawn/checkpoints/safe zones,"Initial placement and balancing pass.",2,Backlog,"world"
+Implement onboarding flow,"First-time player hints and core controls tutorial.",2,Backlog,"client,ui"
+Create smoke checklist,"Fast checks before each publish.",1,Backlog,"qa,infra"
