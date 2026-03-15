@@ -1,2 +1,2 @@
 [tools]
-"rojo-rbx/rojo" = "7.5.1"
+rojo = "rojo-rbx/rojo@7.5.1"
