@@ -7,6 +7,47 @@ local DIALOG_CHOICE_EVENT_NAME = "NpcDialogChoice"
 local NPC_NAME = "Noob"
 local DIALOG_TIMEOUT = 120
 
+local function ensureIntStat(parent, name, defaultValue)
+	local stat = parent:FindFirstChild(name)
+	if stat and stat:IsA("IntValue") then
+		return stat
+	end
+
+	stat = Instance.new("IntValue")
+	stat.Name = name
+	stat.Value = defaultValue
+	stat.Parent = parent
+	return stat
+end
+
+local function ensureLeaderstats(player)
+	local leaderstats = player:FindFirstChild("leaderstats")
+	if not leaderstats then
+		leaderstats = Instance.new("Folder")
+		leaderstats.Name = "leaderstats"
+		leaderstats.Parent = player
+	end
+
+	ensureIntStat(leaderstats, "Money", 0)
+	ensureIntStat(leaderstats, "XP", 0)
+	ensureIntStat(leaderstats, "Level", 1)
+end
+
+local function ensureProgression(player)
+	local progression = player:FindFirstChild("Progression")
+	if not progression then
+		progression = Instance.new("Folder")
+		progression.Name = "Progression"
+		progression.Parent = player
+	end
+
+	ensureIntStat(progression, "SkillPoints", 0)
+	ensureIntStat(progression, "SpeedLevel", 0)
+	ensureIntStat(progression, "MeleeLevel", 0)
+	ensureIntStat(progression, "RangedLevel", 0)
+	ensureIntStat(progression, "HealthLevel", 0)
+end
+
 local openDialogEvent = ReplicatedStorage:FindFirstChild(OPEN_DIALOG_EVENT_NAME)
 if not openDialogEvent then
 	openDialogEvent = Instance.new("RemoteEvent")
@@ -55,14 +96,8 @@ local function disableLegacyDialogGuiTemplate()
 end
 
 Players.PlayerAdded:Connect(function(player)
-	local leaderstats = Instance.new("Folder")
-	leaderstats.Name = "leaderstats"
-	leaderstats.Parent = player
-
-	local money = Instance.new("IntValue")
-	money.Name = "Money"
-	money.Value = 0
-	money.Parent = leaderstats
+	ensureLeaderstats(player)
+	ensureProgression(player)
 
 	task.defer(function()
 		disableLegacyDialogGuiForPlayer(player)
@@ -70,16 +105,8 @@ Players.PlayerAdded:Connect(function(player)
 end)
 
 for _, player in ipairs(Players:GetPlayers()) do
-	if not player:FindFirstChild("leaderstats") then
-		local leaderstats = Instance.new("Folder")
-		leaderstats.Name = "leaderstats"
-		leaderstats.Parent = player
-
-		local money = Instance.new("IntValue")
-		money.Name = "Money"
-		money.Value = 0
-		money.Parent = leaderstats
-	end
+	ensureLeaderstats(player)
+	ensureProgression(player)
 
 	disableLegacyDialogGuiForPlayer(player)
 end
