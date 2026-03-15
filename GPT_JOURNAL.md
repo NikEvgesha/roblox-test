@@ -21,7 +21,21 @@ Project path: `E:\GitFork\RobloxProject`
 - Why it matters:
   - team now has one documented process for code, world changes, and task tracking.
 - What is next:
-  - configure Script Sync or Rojo in each developer environment;
+  - configure Rojo in each developer environment;
   - align Linear board with statuses/labels policy.
 - Verification:
   - file structure created and visible in repository root.
+
+### 2026-03-15 (Rojo-only migration)
+
+- What changed:
+  - migrated script file naming to Rojo conventions (`*.server.lua`, `*.client.lua`, `*.lua`);
+  - switched docs/process from mixed sync to Rojo-only setup (`Docs/ROJO_SETUP.md`);
+  - updated `default.project.json` mapping to direct service-level paths;
+  - added `aftman.toml` to pin Rojo CLI version.
+- Why it matters:
+  - all developers now use one consistent code sync pipeline, reducing sync drift and merge mistakes.
+- What is next:
+  - each developer runs `aftman install` and validates `rojo serve` connection from Studio plugin.
+- Verification:
+  - repository contains renamed script files and updated setup docs.

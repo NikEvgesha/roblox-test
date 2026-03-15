@@ -7,7 +7,7 @@ Read these files before any implementation session:
 3. `GPT_JOURNAL.md`
 4. `Docs/README.md`
 5. `Docs/SOURCE_OF_TRUTH.md`
-6. `Docs/SCRIPT_SYNC_SETUP.md`
+6. `Docs/ROJO_SETUP.md`
 7. `Docs/WORLD_CHANGELOG.md`
 
 Session ritual:
