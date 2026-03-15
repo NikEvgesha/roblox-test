@@ -131,6 +131,14 @@ prompt.Triggered:Connect(function(player)
 end)
 
 dialogChoiceEvent.OnServerEvent:Connect(function(player, choiceId)
+	if choiceId == "leave" then
+		activeDialog[player] = nil
+		openDialogEvent:FireClient(player, {
+			mode = "close",
+		})
+		return
+	end
+
 	local startedAt = activeDialog[player]
 	if not startedAt then
 		return
@@ -164,12 +172,6 @@ dialogChoiceEvent.OnServerEvent:Connect(function(player, choiceId)
 		return
 	end
 
-	if choiceId == "leave" then
-		activeDialog[player] = nil
-		openDialogEvent:FireClient(player, {
-			mode = "close",
-		})
-	end
 end)
 
 Players.PlayerRemoving:Connect(function(player)
