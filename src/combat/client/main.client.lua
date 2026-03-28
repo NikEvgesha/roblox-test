@@ -541,11 +541,11 @@ local function setAimModeEnabled(enabled)
 
 	aimModeEnabled = enabled
 	if aimModeEnabled then
-		UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
+		UserInputService.MouseBehavior = Enum.MouseBehavior.LockCurrentPosition
 		UserInputService.MouseIconEnabled = false
 	else
 		if not spectatorModeEnabled then
-			if UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter then
+			if UserInputService.MouseBehavior ~= Enum.MouseBehavior.Default then
 				UserInputService.MouseBehavior = Enum.MouseBehavior.Default
 			end
 			UserInputService.MouseIconEnabled = true
@@ -572,7 +572,7 @@ local function setSpectatorLookActive(enabled)
 	end
 
 	if spectatorLookActive then
-		UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
+		UserInputService.MouseBehavior = Enum.MouseBehavior.LockCurrentPosition
 		UserInputService.MouseIconEnabled = false
 	else
 		UserInputService.MouseBehavior = Enum.MouseBehavior.Default
