@@ -1,5 +1,5 @@
 {
-  "name": "RobloxProjectCombat",
+  "name": "RobloxProjectLobby",
   "tree": {
     "$className": "DataModel",
     "ReplicatedStorage": {
@@ -8,11 +8,11 @@
       }
     },
     "ServerScriptService": {
-      "$path": "src/combat/server"
+      "$path": "src/lobby/server"
     },
     "StarterPlayer": {
       "StarterPlayerScripts": {
-        "$path": "src/combat/client"
+        "$path": "src/lobby/client"
       }
     }
   }

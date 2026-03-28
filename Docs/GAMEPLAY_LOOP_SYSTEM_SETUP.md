@@ -6,28 +6,38 @@ Describe runtime setup for a two-place structure (`Lobby Place` + `Combat Place`
 
 ## Required Files (MVP)
 
-- `src/server/main.server.lua`
-- `src/server/boot.server.lua`
-- `src/server/combat.server.lua`
-- `src/server/zombies.server.lua`
-- `src/server/skills.server.lua`
-- `src/client/main.client.lua`
+- `src/lobby/server/main.server.lua`
+- `src/lobby/server/boot.server.lua`
+- `src/lobby/client/main.client.lua`
+- `src/combat/server/boot.server.lua`
+- `src/combat/server/combat.server.lua`
+- `src/combat/server/zombies.server.lua`
+- `src/combat/server/skills.server.lua`
+- `src/combat/client/main.client.lua`
 - `src/shared/Shared.lua`
 - `src/shared/CombatConfig.lua`
 - `default.project.json`
+- `lobby.project.json`
+- `combat.project.json`
 
 ## Rojo Mapping
 
-- `src/server` -> `ServerScriptService`
-- `src/client` -> `StarterPlayer/StarterPlayerScripts`
+- Lobby:
+  - `src/lobby/server` -> `ServerScriptService`
+  - `src/lobby/client` -> `StarterPlayer/StarterPlayerScripts`
+- Combat:
+  - `src/combat/server` -> `ServerScriptService`
+  - `src/combat/client` -> `StarterPlayer/StarterPlayerScripts`
 - `src/shared` -> `ReplicatedStorage/Shared`
 
 ## Local Setup
 
 1. `aftman install`
-2. `rojo serve default.project.json`
-3. In Studio (Rojo plugin), click `Connect` to `localhost:34872`
-4. Verify Rojo-managed scripts are visible in Explorer
+2. `rojo serve lobby.project.json --port 34872`
+3. `rojo serve combat.project.json --port 34873`
+4. In Studio (Rojo plugin), connect lobby place to `localhost:34872`
+5. In Studio (Rojo plugin), connect combat place to `localhost:34873`
+6. Verify Rojo-managed scripts are visible in Explorer
 
 ## Place Setup Checklist
 
@@ -40,11 +50,11 @@ Describe runtime setup for a two-place structure (`Lobby Place` + `Combat Place`
 
 ## Runtime Wiring
 
-1. `main.server.lua` starts core match/run services.
-2. `combat.server.lua` controls run and intermission states.
-3. `zombies.server.lua` handles wave spawn and enemy lifecycle.
-4. `skills.server.lua` handles class selection and skill upgrades.
-5. `main.client.lua` consumes run state, HUD, shop, and skill events.
+1. Lobby server scripts handle queue/session entry and pre-run UX.
+2. Combat server scripts handle wave director, combat loop, and respawn flow.
+3. Shared modules are reused across both places via `ReplicatedStorage/Shared`.
+4. Lobby client script stays lightweight (menu/queue hooks).
+5. Combat client script handles HUD, shop, skills, and revive purchase UI.
 
 ## Collaboration Rules
 

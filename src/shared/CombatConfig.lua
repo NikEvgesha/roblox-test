@@ -30,8 +30,15 @@ return {
 	},
 
 	Zombies = {
-		LobbyPlaceId = 0,
+		LobbyPlaceId = 135533599453315,
 		DefaultDifficulty = "Medium",
+		TargetWaveCount = 100,
+		IntermissionSeconds = 12,
+		BaseEnemiesPerWave = 8,
+		EnemiesPerWaveStep = 1,
+		BossWaveInterval = 10,
+		BossAdditionalEnemies = 4,
+		BossVariantKey = "BossBrute",
 		Difficulties = {
 			Easy = {
 				DisplayName = "Easy",
@@ -94,8 +101,8 @@ return {
 		FreeRespawnIncrementSeconds = 10,
 		WipePurchaseWindowSeconds = 30,
 		ReviveProducts = {
-			SoloReviveProductId = 0,
-			TeamReviveProductId = 0,
+			SoloReviveProductId = 3565038680,
+			TeamReviveProductId = 3565038815,
 		},
 		ReviveDisplayPrices = {
 			SoloReviveRobux = 10,
@@ -170,6 +177,17 @@ return {
 				ExplosionTriggerRange = 6.5,
 				Color = { 160, 88, 74 },
 				HeadColor = { 194, 118, 95 },
+			},
+			BossBrute = {
+				DisplayName = "Boss Brute",
+				IsBoss = true,
+				HealthMul = 6.0,
+				MoveSpeedMul = 0.9,
+				DamageMul = 2.5,
+				RewardMul = 3.0,
+				BossCrystalDrop = 3,
+				Color = { 120, 55, 55 },
+				HeadColor = { 175, 90, 90 },
 			},
 		},
 

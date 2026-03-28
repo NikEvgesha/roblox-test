@@ -8,11 +8,15 @@ Team Roblox project with hybrid source-of-truth and a Rojo-first code pipeline:
 
 ## Repository Layout
 
-- `src/server` -> server scripts
-- `src/client` -> client scripts
+- `src/lobby/server` -> lobby server scripts
+- `src/lobby/client` -> lobby client scripts
+- `src/combat/server` -> combat server scripts
+- `src/combat/client` -> combat client scripts
 - `src/shared` -> shared modules
 - `Docs` -> workflow, setup, changelogs, and quality docs
-- `default.project.json` -> Rojo mapping (required)
+- `default.project.json` -> default Rojo mapping (combat)
+- `lobby.project.json` -> lobby Rojo mapping
+- `combat.project.json` -> combat Rojo mapping
 - `aftman.toml` -> pinned CLI tool versions
 
 ## Quick Start
@@ -21,9 +25,12 @@ Team Roblox project with hybrid source-of-truth and a Rojo-first code pipeline:
 2. Keep Team Create/Collaborate enabled.
 3. Install Rojo and plugin using `Docs/ROJO_SETUP.md`.
 4. Run `rojo serve` from repository root and connect plugin in Studio.
-5. Edit scripts only in local files (`src/*`) and let Rojo sync.
-6. Log world-only changes in `Docs/WORLD_CHANGELOG.md`.
-7. Track every task in Linear and link issue IDs in commits/changelog.
+5. Use the right project file:
+   - lobby place: `rojo serve lobby.project.json --port 34872`
+   - combat place: `rojo serve combat.project.json --port 34873`
+6. Edit scripts only in local files (`src/*`) and let Rojo sync.
+7. Log world-only changes in `Docs/WORLD_CHANGELOG.md`.
+8. Track every task in Linear and link issue IDs in commits/changelog.
 
 ## Rojo Conventions
 
@@ -37,7 +44,8 @@ Team Roblox project with hybrid source-of-truth and a Rojo-first code pipeline:
 
 ```powershell
 aftman install
-rojo serve
+rojo serve combat.project.json --port 34873
+rojo serve lobby.project.json --port 34872
 ```
 
 ## Team Rules

@@ -22,16 +22,22 @@ Expected result: Rojo v7 is available in shell.
 ## Studio Connection
 
 1. Open your Group-owned place in Studio.
-2. Start the server from repository root:
+2. Start Rojo for needed place from repository root:
 
 ```powershell
-rojo serve
+rojo serve lobby.project.json --port 34872
+# or
+rojo serve combat.project.json --port 34873
 ```
 
-3. In Studio, open Rojo plugin and connect to `localhost:34872`.
+3. In Studio, open Rojo plugin and connect to the matching port.
 4. Confirm mapped trees appear in Explorer:
-   - `ServerScriptService` <- `src/server`
-   - `StarterPlayer/StarterPlayerScripts` <- `src/client`
+   - Lobby place:
+     - `ServerScriptService` <- `src/lobby/server`
+     - `StarterPlayer/StarterPlayerScripts` <- `src/lobby/client`
+   - Combat place:
+     - `ServerScriptService` <- `src/combat/server`
+     - `StarterPlayer/StarterPlayerScripts` <- `src/combat/client`
    - `ReplicatedStorage/Shared` <- `src/shared`
 
 ## Naming Rules

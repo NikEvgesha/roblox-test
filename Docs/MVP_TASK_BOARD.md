@@ -24,8 +24,8 @@
 | ID | Task | Owner | Status | Output |
 |---|---|---|---|---|
 | B-1 | Define wave loop state machine spec | Assistant | Done | `Docs/GAMEPLAY_LOOP_SYSTEM_SPEC.md` |
-| B-2 | Implement baseline wave prep/active/intermission cycle | Assistant | Backlog | `src/server/combat.server.lua` |
-| B-3 | Configure boss waves every 10th checkpoint | Assistant | Backlog | `src/server/zombies.server.lua` |
+| B-2 | Implement baseline wave prep/active/intermission cycle | Assistant | Backlog | `src/combat/server/combat.server.lua` |
+| B-3 | Configure boss waves every 10th checkpoint | Assistant | Backlog | `src/combat/server/zombies.server.lua` |
 | B-4 | Lock exact fixed wave target for run victory | Shared | Done | `100` baseline (tunable) |
 | B-5 | Implement player-count scaling (1..6) + difficulty modifiers | Assistant | Backlog | Wave director scaling rules |
 
@@ -35,7 +35,7 @@
 |---|---|---|---|---|
 | C-1 | Lock MVP class roster and roles | Assistant | Done | `Docs/GDD_MVP.md` |
 | C-2 | Define class ability sheet v1 (level points + optional ULT every 6 levels) | Assistant | Done | `Docs/CLASS_ABILITY_SHEET_V1.md` |
-| C-3 | Implement class selection and effect application | Assistant | Backlog | `src/server/skills.server.lua` + client UI |
+| C-3 | Implement class selection and effect application | Assistant | Backlog | `src/combat/server/skills.server.lua` + client UI |
 | C-4 | Final class balance pass (damage/heal/cooldowns) | Shared | Backlog | Balance table |
 | C-5 | Implement universal infinite stat node (`Endless Mastery`) | Assistant | Backlog | Skill tree + runtime stat scaling |
 
