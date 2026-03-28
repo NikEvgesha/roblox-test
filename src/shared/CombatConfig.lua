@@ -37,6 +37,29 @@ return {
 		QueueTouchDebounceSeconds = 1.0,
 	},
 
+	Classes = {
+		DefaultClass = "Assault",
+		Order = { "Assault", "Builder", "Healer", "Melee" },
+		Definitions = {
+			Assault = {
+				DisplayName = "Assault",
+				StarterWeapons = { "Rifle" },
+			},
+			Builder = {
+				DisplayName = "Builder",
+				StarterWeapons = { "Shotgun" },
+			},
+			Healer = {
+				DisplayName = "Healer",
+				StarterWeapons = { "Bow" },
+			},
+			Melee = {
+				DisplayName = "Melee",
+				StarterWeapons = { "Bulava" },
+			},
+		},
+	},
+
 	MetaProgression = {
 		DataStoreName = "HeroicSurvivalProfile_v1",
 		AutoSaveIntervalSeconds = 90,

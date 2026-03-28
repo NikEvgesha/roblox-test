@@ -5,6 +5,9 @@ local combatConfig = require(script.Parent:WaitForChild("CombatConfig"))
 local metaConfig = combatConfig.MetaProgression or {}
 local upgradesConfig = metaConfig.Upgrades or {}
 local upgradeOrder = metaConfig.UpgradeOrder or { "Damage", "Health", "Speed" }
+local classesConfig = combatConfig.Classes or {}
+local classDefinitions = classesConfig.Definitions or {}
+local classOrder = classesConfig.Order or { "Assault", "Builder", "Healer", "Melee" }
 
 local STORE_NAME = tostring(metaConfig.DataStoreName or "HeroicSurvivalProfile_v1")
 local AUTO_SAVE_INTERVAL = math.max(30, math.floor(tonumber(metaConfig.AutoSaveIntervalSeconds) or 90))
@@ -26,6 +29,9 @@ local function shouldDisablePersistence(errorMessage)
 	if string.find(text, "studio access to api services is not enabled", 1, true) then
 		return true
 	end
+	if string.find(text, "studio access to apis is not allowed", 1, true) then
+		return true
+	end
 	if string.find(text, "403", 1, true) then
 		return true
 	end
@@ -35,6 +41,34 @@ local function shouldDisablePersistence(errorMessage)
 	return false
 end
 
+local function resolveDefaultClassKey()
+	local requested = classesConfig.DefaultClass
+	if type(requested) == "string" and classDefinitions[requested] then
+		return requested
+	end
+
+	for _, classKey in ipairs(classOrder) do
+		if classDefinitions[classKey] then
+			return classKey
+		end
+	end
+
+	for classKey in pairs(classDefinitions) do
+		return classKey
+	end
+
+	return "Assault"
+end
+
+local DEFAULT_CLASS_KEY = resolveDefaultClassKey()
+
+local function normalizeClassKey(classKey)
+	if type(classKey) == "string" and classDefinitions[classKey] then
+		return classKey
+	end
+	return DEFAULT_CLASS_KEY
+end
+
 local function ensureIntValue(parent, name, defaultValue)
 	local value = parent:FindFirstChild(name)
 	if value and value:IsA("IntValue") then
@@ -42,6 +76,19 @@ local function ensureIntValue(parent, name, defaultValue)
 	end
 
 	value = Instance.new("IntValue")
+	value.Name = name
+	value.Value = defaultValue
+	value.Parent = parent
+	return value
+end
+
+local function ensureStringValue(parent, name, defaultValue)
+	local value = parent:FindFirstChild(name)
+	if value and value:IsA("StringValue") then
+		return value
+	end
+
+	value = Instance.new("StringValue")
 	value.Name = name
 	value.Value = defaultValue
 	value.Parent = parent
@@ -63,6 +110,7 @@ local function buildDefaultProfile()
 	return {
 		version = 1,
 		crystals = 0,
+		selectedClass = DEFAULT_CLASS_KEY,
 		upgrades = upgrades,
 		updatedAt = os.time(),
 	}
@@ -76,6 +124,7 @@ local function normalizeProfile(raw)
 
 	normalized.version = math.max(1, math.floor(tonumber(raw.version) or 1))
 	normalized.crystals = math.max(0, math.floor(tonumber(raw.crystals) or 0))
+	normalized.selectedClass = normalizeClassKey(raw.selectedClass)
 
 	if type(raw.upgrades) == "table" then
 		for _, upgradeKey in ipairs(upgradeOrder) do
@@ -124,6 +173,7 @@ local function ensureContainers(player)
 	for _, upgradeKey in ipairs(upgradeOrder) do
 		upgradeValues[upgradeKey] = ensureIntValue(metaProgression, upgradeKey, 0)
 	end
+	local selectedClass = ensureStringValue(metaProgression, "SelectedClass", DEFAULT_CLASS_KEY)
 
 	return {
 		leaderstats = leaderstats,
@@ -139,6 +189,7 @@ local function ensureContainers(player)
 		rangedLevel = rangedLevel,
 		healthLevel = healthLevel,
 		upgrades = upgradeValues,
+		selectedClass = selectedClass,
 	}
 end
 
@@ -170,6 +221,15 @@ local function bindDirtySignals(player, containers)
 			dirtyByUserId[player.UserId] = true
 		end))
 	end
+	table.insert(connections, containers.selectedClass:GetPropertyChangedSignal("Value"):Connect(function()
+		local normalized = normalizeClassKey(containers.selectedClass.Value)
+		if normalized ~= containers.selectedClass.Value then
+			containers.selectedClass.Value = normalized
+			return
+		end
+		player:SetAttribute("SelectedClass", normalized)
+		dirtyByUserId[player.UserId] = true
+	end))
 
 	connectionsByUserId[player.UserId] = connections
 end
@@ -215,6 +275,8 @@ function ProfileStore.Load(player)
 	end
 
 	containers.crystals.Value = profile.crystals
+	containers.selectedClass.Value = normalizeClassKey(profile.selectedClass)
+	player:SetAttribute("SelectedClass", containers.selectedClass.Value)
 	for upgradeKey, value in pairs(containers.upgrades) do
 		value.Value = profile.upgrades[upgradeKey] or 0
 	end
@@ -231,6 +293,7 @@ function ProfileStore.Capture(player)
 	local containers = ensureContainers(player)
 	local profile = buildDefaultProfile()
 	profile.crystals = math.max(0, containers.crystals.Value)
+	profile.selectedClass = normalizeClassKey(containers.selectedClass.Value)
 
 	for upgradeKey, value in pairs(containers.upgrades) do
 		profile.upgrades[upgradeKey] = clampUpgradeLevel(upgradeKey, value.Value)

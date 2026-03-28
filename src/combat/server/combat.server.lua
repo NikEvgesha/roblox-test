@@ -15,9 +15,40 @@ local KILL_TAG_LIFETIME = 8
 local weaponsByKey = combatConfig.Weapons
 local metaProgressionConfig = combatConfig.MetaProgression or {}
 local metaUpgradeConfig = metaProgressionConfig.Upgrades or {}
+local classesConfig = combatConfig.Classes or {}
+local classDefinitions = classesConfig.Definitions or {}
+local classOrder = classesConfig.Order or { "Assault", "Builder", "Healer", "Melee" }
 local toolNameToWeaponKey = {}
 for weaponKey, definition in pairs(weaponsByKey) do
 	toolNameToWeaponKey[definition.ToolName] = weaponKey
+end
+
+local function resolveDefaultClassKey()
+	local requested = classesConfig.DefaultClass
+	if type(requested) == "string" and classDefinitions[requested] then
+		return requested
+	end
+
+	for _, classKey in ipairs(classOrder) do
+		if classDefinitions[classKey] then
+			return classKey
+		end
+	end
+
+	for classKey in pairs(classDefinitions) do
+		return classKey
+	end
+
+	return "Assault"
+end
+
+local DEFAULT_CLASS_KEY = resolveDefaultClassKey()
+
+local function normalizeClassKey(classKey)
+	if type(classKey) == "string" and classDefinitions[classKey] then
+		return classKey
+	end
+	return DEFAULT_CLASS_KEY
 end
 
 local function ensureRemoteEvent(name)
@@ -315,6 +346,89 @@ local function ensureOwnedLoadout(player)
 			ensureToolInContainer(starterGear, weaponKey)
 		end
 	end
+end
+
+local function getSelectedClassFromMeta(player)
+	local metaProgression = player:FindFirstChild("MetaProgression")
+	if not metaProgression then
+		return nil
+	end
+
+	local selectedClass = metaProgression:FindFirstChild("SelectedClass")
+	if selectedClass and selectedClass:IsA("StringValue") then
+		return normalizeClassKey(selectedClass.Value)
+	end
+
+	return nil
+end
+
+local function getSelectedClassFromJoinData(player)
+	local joinData = nil
+	local ok = pcall(function()
+		joinData = player:GetJoinData()
+	end)
+	if not ok or type(joinData) ~= "table" then
+		return nil
+	end
+
+	local teleportData = joinData.TeleportData
+	if type(teleportData) ~= "table" then
+		return nil
+	end
+
+	local classByUserId = teleportData.selectedClassByUserId
+	if type(classByUserId) == "table" then
+		local byString = classByUserId[tostring(player.UserId)]
+		if byString ~= nil then
+			return normalizeClassKey(byString)
+		end
+		local byNumber = classByUserId[player.UserId]
+		if byNumber ~= nil then
+			return normalizeClassKey(byNumber)
+		end
+	end
+
+	if teleportData.selectedClass ~= nil then
+		return normalizeClassKey(teleportData.selectedClass)
+	end
+
+	return nil
+end
+
+local function resolveSelectedClassForPlayer(player)
+	return getSelectedClassFromJoinData(player) or getSelectedClassFromMeta(player) or DEFAULT_CLASS_KEY
+end
+
+local function applyClassLoadout(player, playerState, classKey)
+	local normalizedClass = normalizeClassKey(classKey)
+	local classDefinition = classDefinitions[normalizedClass] or {}
+	local starterWeapons = classDefinition.StarterWeapons
+
+	table.clear(playerState.ownedWeapons)
+	table.clear(playerState.ammoByWeapon)
+	playerState.selectedClass = normalizedClass
+
+	local addedAny = false
+	if type(starterWeapons) == "table" then
+		for _, weaponKey in ipairs(starterWeapons) do
+			if weaponsByKey[weaponKey] then
+				playerState.ownedWeapons[weaponKey] = true
+				getAmmoStateForWeapon(playerState, weaponKey)
+				addedAny = true
+			end
+		end
+	end
+
+	if not addedAny then
+		for _, weaponKey in ipairs(combatConfig.DefaultOwnedWeapons) do
+			if weaponsByKey[weaponKey] then
+				playerState.ownedWeapons[weaponKey] = true
+				getAmmoStateForWeapon(playerState, weaponKey)
+			end
+		end
+	end
+
+	player:SetAttribute("SelectedClass", normalizedClass)
 end
 
 local function playHandleSound(player, weaponKey, soundName)
@@ -1056,15 +1170,12 @@ local function setupPlayer(player)
 		reloading = false,
 		lastShotAt = 0,
 		lastMeleeAt = 0,
+		selectedClass = DEFAULT_CLASS_KEY,
 	}
 	stateByPlayer[player] = playerState
 
-	for _, weaponKey in ipairs(combatConfig.DefaultOwnedWeapons) do
-		if weaponsByKey[weaponKey] then
-			playerState.ownedWeapons[weaponKey] = true
-			getAmmoStateForWeapon(playerState, weaponKey)
-		end
-	end
+	local selectedClass = resolveSelectedClassForPlayer(player)
+	applyClassLoadout(player, playerState, selectedClass)
 
 	ensureOwnedLoadout(player)
 

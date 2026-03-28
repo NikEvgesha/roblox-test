@@ -10,8 +10,12 @@ local DEFAULT_DIFFICULTY_ORDER = { "Easy", "Medium", "Hard", "Insane" }
 
 local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local combatConfig = require(sharedFolder:WaitForChild("CombatConfig"))
+local profileStore = require(sharedFolder:WaitForChild("ProfileStore"))
 local zombieConfig = combatConfig.Zombies or {}
 local lobbyConfig = combatConfig.Lobby or {}
+local classesConfig = combatConfig.Classes or {}
+local classDefinitions = classesConfig.Definitions or {}
+local classOrder = classesConfig.Order or { "Assault", "Builder", "Healer", "Melee" }
 
 local COMBAT_PLACE_ID = tonumber(lobbyConfig.CombatPlaceId) or 0
 local MAX_PARTY_SIZE = math.max(1, math.floor(tonumber(lobbyConfig.MaxPartySize) or 6))
@@ -21,6 +25,65 @@ local TOUCH_DEBOUNCE_SECONDS = math.max(0.15, tonumber(lobbyConfig.QueueTouchDeb
 
 local difficultyConfig = zombieConfig.Difficulties or {}
 local defaultDifficulty = zombieConfig.DefaultDifficulty or "Medium"
+
+local function resolveDefaultClassKey()
+	local requested = classesConfig.DefaultClass
+	if type(requested) == "string" and classDefinitions[requested] then
+		return requested
+	end
+
+	for _, classKey in ipairs(classOrder) do
+		if classDefinitions[classKey] then
+			return classKey
+		end
+	end
+
+	for classKey in pairs(classDefinitions) do
+		return classKey
+	end
+
+	return "Assault"
+end
+
+local defaultClassKey = resolveDefaultClassKey()
+
+local function normalizeClassKey(classKey)
+	if type(classKey) == "string" and classDefinitions[classKey] then
+		return classKey
+	end
+	return defaultClassKey
+end
+
+local function buildClassOrder()
+	local order = {}
+	local seen = {}
+
+	for _, classKey in ipairs(classOrder) do
+		if classDefinitions[classKey] then
+			table.insert(order, classKey)
+			seen[classKey] = true
+		end
+	end
+
+	local extras = {}
+	for classKey in pairs(classDefinitions) do
+		if not seen[classKey] then
+			table.insert(extras, classKey)
+		end
+	end
+	table.sort(extras)
+	for _, classKey in ipairs(extras) do
+		table.insert(order, classKey)
+	end
+
+	if #order == 0 then
+		table.insert(order, defaultClassKey)
+	end
+
+	return order
+end
+
+local classKeyOrder = buildClassOrder()
 
 local function ensureRemoteEvent(name)
 	local event = ReplicatedStorage:FindFirstChild(name)
@@ -195,6 +258,67 @@ local function publishLobbyQueueAttributes()
 	Workspace:SetAttribute("LobbyCombatPlaceId", COMBAT_PLACE_ID)
 end
 
+local function ensureStringValue(parent, name, defaultValue)
+	local value = parent:FindFirstChild(name)
+	if value and value:IsA("StringValue") then
+		return value
+	end
+
+	value = Instance.new("StringValue")
+	value.Name = name
+	value.Value = defaultValue
+	value.Parent = parent
+	return value
+end
+
+local function getSelectedClassValueObject(player, createIfMissing)
+	local metaProgression = player:FindFirstChild("MetaProgression")
+	if not metaProgression and createIfMissing then
+		metaProgression = Instance.new("Folder")
+		metaProgression.Name = "MetaProgression"
+		metaProgression.Parent = player
+	end
+
+	if not metaProgression then
+		return nil
+	end
+
+	local selectedClass = metaProgression:FindFirstChild("SelectedClass")
+	if selectedClass and selectedClass:IsA("StringValue") then
+		return selectedClass
+	end
+
+	if createIfMissing then
+		return ensureStringValue(metaProgression, "SelectedClass", defaultClassKey)
+	end
+
+	return nil
+end
+
+local function getSelectedClassForPlayer(player)
+	local value = getSelectedClassValueObject(player, false)
+	if value then
+		return normalizeClassKey(value.Value)
+	end
+	return defaultClassKey
+end
+
+local function setSelectedClassForPlayer(player, classKey)
+	local normalized = normalizeClassKey(classKey)
+	local value = getSelectedClassValueObject(player, true)
+	if not value then
+		return normalized
+	end
+
+	if value.Value ~= normalized then
+		value.Value = normalized
+		profileStore.MarkDirty(player)
+	end
+
+	player:SetAttribute("SelectedClass", normalized)
+	return normalized
+end
+
 local function sendNotice(player, text)
 	if not player or player.Parent ~= Players then
 		return
@@ -270,11 +394,21 @@ local function sendQueueState(player)
 		return
 	end
 
+	local classDisplayNames = {}
+	for _, classKey in ipairs(classKeyOrder) do
+		local classDef = classDefinitions[classKey] or {}
+		classDisplayNames[classKey] = classDef.DisplayName or classKey
+	end
+
 	queueEvent:FireClient(player, {
 		type = "state",
 		queue = serializeQueue(queueByPlayer[player]),
 		pads = serializePads(),
 		difficulties = difficultyOrder,
+		classes = classKeyOrder,
+		classDisplayNames = classDisplayNames,
+		selectedClass = getSelectedClassForPlayer(player),
+		defaultClass = defaultClassKey,
 		defaultDifficulty = defaultDifficulty,
 		maxPartySize = MAX_PARTY_SIZE,
 		combatPlaceId = COMBAT_PLACE_ID,
@@ -437,6 +571,14 @@ local function launchQueue(queue, autoTriggered)
 		return
 	end
 
+	for _, member in ipairs(members) do
+		if member:GetAttribute("PersistentProfileLoaded") ~= true then
+			sendNotice(member, "Profile is still loading. Please wait a moment.")
+			refreshAllQueueStates()
+			return
+		end
+	end
+
 	if RunService:IsStudio() then
 		if autoTriggered then
 			notifyQueueMembers(queue, "Queue is full. Studio mode: teleport skipped.")
@@ -457,10 +599,16 @@ local function launchQueue(queue, autoTriggered)
 		notifyQueueMembers(queue, "Host started run. Teleporting...")
 	end
 
+	local selectedClassByUserId = {}
+	for _, member in ipairs(members) do
+		selectedClassByUserId[tostring(member.UserId)] = getSelectedClassForPlayer(member)
+	end
+
 	local teleportData = {
 		difficulty = queue.difficulty,
 		targetPartySize = queue.targetSize,
 		hostUserId = queue.host and queue.host.UserId or 0,
+		selectedClassByUserId = selectedClassByUserId,
 		source = "LobbyQueue",
 	}
 
@@ -577,6 +725,19 @@ local function onQueueAction(player, payload)
 		return
 	end
 
+	if action == "set_class" then
+		if player:GetAttribute("PersistentProfileLoaded") ~= true then
+			sendNotice(player, "Profile is loading. Try again in a moment.")
+			return
+		end
+
+		local requestedClass = tostring(payload.classKey or "")
+		local normalized = setSelectedClassForPlayer(player, requestedClass)
+		sendNotice(player, ("Class selected: %s"):format((classDefinitions[normalized] and classDefinitions[normalized].DisplayName) or normalized))
+		sendQueueState(player)
+		return
+	end
+
 	local queue = queueByPlayer[player]
 	if not queue then
 		sendNotice(player, "Join a queue pad first.")
@@ -666,7 +827,13 @@ end
 queueEvent.OnServerEvent:Connect(onQueueAction)
 
 Players.PlayerAdded:Connect(function(player)
+	player:GetAttributeChangedSignal("PersistentProfileLoaded"):Connect(function()
+		sendQueueState(player)
+	end)
+
 	task.defer(function()
+		local classKey = setSelectedClassForPlayer(player, getSelectedClassForPlayer(player))
+		player:SetAttribute("SelectedClass", classKey)
 		sendQueueState(player)
 	end)
 end)
@@ -677,7 +844,13 @@ Players.PlayerRemoving:Connect(function(player)
 end)
 
 for _, player in ipairs(Players:GetPlayers()) do
+	player:GetAttributeChangedSignal("PersistentProfileLoaded"):Connect(function()
+		sendQueueState(player)
+	end)
+
 	task.defer(function()
+		local classKey = setSelectedClassForPlayer(player, getSelectedClassForPlayer(player))
+		player:SetAttribute("SelectedClass", classKey)
 		sendQueueState(player)
 	end)
 end
