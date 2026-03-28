@@ -73,6 +73,7 @@ Rule: invalid transitions are rejected and logged.
 - `TEAMMATE_REVIVE_WHEN_ALL_DEAD = 50 Robux`
 - `FULL_TEAM_WIPE_PURCHASE_WINDOW = 30s`
 - `RETURN_TO_LOBBY_DELAY_AFTER_WIPE = 0s`
+- `WAVE_TABLE_TUNING = config driven by wave ranges`
 
 ## Data Contract (MVP)
 
@@ -110,6 +111,10 @@ Rule: invalid transitions are rejected and logged.
   - `AchievementCompleted`
   - `CharacterUnlocked`
 - All client payloads are server validated.
+- Runtime debug attrs on `Workspace`:
+  - `WaveBudget`
+  - `AliveCap`
+  - `SpawnInterval`
 
 ## Skill Progression Rules (Locked Baseline)
 

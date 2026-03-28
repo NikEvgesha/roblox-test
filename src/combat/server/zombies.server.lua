@@ -13,6 +13,7 @@ local zombieConfig = combatConfig.Zombies
 local progressionConfig = combatConfig.Progression
 local variantConfig = zombieConfig.Variants or {}
 local difficultySchedule = zombieConfig.DifficultySchedule or { { MinTime = 0, Weights = { Walker = 100 } } }
+local waveTable = zombieConfig.WaveTable or {}
 
 local SURVIVAL_EVENT_NAME = "SurvivalEvent"
 local REVIVE_PURCHASE_EVENT_NAME = "RevivePurchaseEvent"
@@ -108,6 +109,7 @@ local matchState = {
 	startedAt = 0,
 	ended = true,
 	waveNumber = 0,
+	waveBudget = 0,
 	waveActive = false,
 	waveSpawnsRemaining = 0,
 	waveBossSpawnsRemaining = 0,
@@ -479,8 +481,30 @@ local function getSurvivalSeconds()
 	return math.max(0, os.clock() - matchState.startedAt)
 end
 
+local function getDifficultyStageForWave(waveNumber)
+	return math.max(0, math.floor(tonumber(waveNumber) or 1) - 1)
+end
+
 local function getDifficultyStage()
-	return math.max(0, (matchState.waveNumber or 1) - 1)
+	return getDifficultyStageForWave(matchState.waveNumber or 1)
+end
+
+local function getWaveTableEntry(waveNumber)
+	local wave = math.max(1, math.floor(tonumber(waveNumber) or 1))
+	local selected = nil
+
+	for _, entry in ipairs(waveTable) do
+		if type(entry) == "table" then
+			local minWave = math.max(1, math.floor(tonumber(entry.MinWave) or 1))
+			local maxWaveRaw = entry.MaxWave
+			local maxWave = maxWaveRaw == nil and math.huge or math.max(minWave, math.floor(tonumber(maxWaveRaw) or minWave))
+			if wave >= minWave and wave <= maxWave then
+				selected = entry
+			end
+		end
+	end
+
+	return selected
 end
 
 local function getDifficultyMultipliers()
@@ -495,6 +519,11 @@ local function getDifficultyMultipliers()
 end
 
 local function getCurrentVariantWeights()
+	local waveEntry = getWaveTableEntry(matchState.waveNumber or 1)
+	if waveEntry and type(waveEntry.Weights) == "table" then
+		return waveEntry.Weights
+	end
+
 	local stage = getDifficultyStage()
 	local progressionTime = stage * math.max(1, zombieConfig.DifficultyStepSeconds)
 	local chosenWeights = nil
@@ -1026,12 +1055,29 @@ local function isBossWave(waveNumber)
 end
 
 local function computeWaveSpawnBudget(waveNumber)
+	local waveEntry = getWaveTableEntry(waveNumber)
 	local multipliers = getDifficultyMultipliers()
 	local partySize = #Players:GetPlayers()
-	local normalCount = (tonumber(zombieConfig.BaseEnemiesPerWave) or 8)
-	normalCount += math.max(0, waveNumber - 1) * (tonumber(zombieConfig.EnemiesPerWaveStep) or 1)
+
+	local baseEnemies = tonumber(waveEntry and waveEntry.BaseEnemiesPerWave)
+	if baseEnemies == nil then
+		baseEnemies = tonumber(zombieConfig.BaseEnemiesPerWave) or 8
+	end
+
+	local perWaveStep = tonumber(waveEntry and waveEntry.EnemiesPerWaveStep)
+	if perWaveStep == nil then
+		perWaveStep = tonumber(zombieConfig.EnemiesPerWaveStep) or 1
+	end
+
+	local growthStartWave = math.max(1, math.floor(tonumber((waveEntry and waveEntry.MinWave) or 1) or 1))
+	local normalCount = baseEnemies + math.max(0, waveNumber - growthStartWave) * perWaveStep
+
 	if isBossWave(waveNumber) then
-		normalCount += tonumber(zombieConfig.BossAdditionalEnemies) or 0
+		local bossAdditionalEnemies = tonumber(waveEntry and waveEntry.BossAdditionalEnemies)
+		if bossAdditionalEnemies == nil then
+			bossAdditionalEnemies = tonumber(zombieConfig.BossAdditionalEnemies) or 0
+		end
+		normalCount += bossAdditionalEnemies
 	end
 
 	normalCount *= getEnemyCountPartyMultiplier(partySize)
@@ -1042,19 +1088,76 @@ local function computeWaveSpawnBudget(waveNumber)
 	return normalCount + bossCount, bossCount
 end
 
-local function getWaveSpawnInterval()
-	local stage = getDifficultyStage()
+local function getWaveAliveCap(waveNumber)
+	local stage = getDifficultyStageForWave(waveNumber)
+	local waveEntry = getWaveTableEntry(waveNumber)
+	local multipliers = getDifficultyMultipliers()
+	local partySize = #Players:GetPlayers()
+
+	local baseAlive = tonumber(waveEntry and waveEntry.MaxAlive)
+	if baseAlive == nil then
+		local configBaseAlive = tonumber(zombieConfig.BaseMaxAlive) or 10
+		local configAlivePerStage = tonumber(zombieConfig.MaxAlivePerStage) or 2
+		baseAlive = configBaseAlive + stage * configAlivePerStage
+	end
+
+	local maxAlive = math.max(2, baseAlive)
+	maxAlive *= getEnemyCountPartyMultiplier(partySize)
+	maxAlive *= multipliers.enemyCount
+	return math.max(2, math.floor(maxAlive + 0.5))
+end
+
+local function getWaveSpawnInterval(waveNumber)
+	local stage = getDifficultyStageForWave(waveNumber)
+	local waveEntry = getWaveTableEntry(waveNumber)
 	local multipliers = getDifficultyMultipliers()
 	local partyMultiplier = getEnemyCountPartyMultiplier(#Players:GetPlayers())
 	local spawnPressure = math.max(1, multipliers.enemyCount * partyMultiplier)
-	local interval = zombieConfig.BaseSpawnInterval / (1 + stage * zombieConfig.SpawnRateScalePerStage)
+	local interval = tonumber(waveEntry and waveEntry.SpawnInterval)
+	if interval == nil then
+		local configBaseSpawn = tonumber(zombieConfig.BaseSpawnInterval) or 3.8
+		local configSpawnScale = tonumber(zombieConfig.SpawnRateScalePerStage) or 0.12
+		interval = configBaseSpawn / (1 + stage * configSpawnScale)
+	end
 	interval /= spawnPressure
-	return math.max(zombieConfig.MinSpawnInterval, interval)
+
+	local minSpawnInterval = tonumber(waveEntry and waveEntry.MinSpawnInterval)
+	if minSpawnInterval == nil then
+		minSpawnInterval = tonumber(zombieConfig.MinSpawnInterval) or 1.1
+	end
+	return math.max(minSpawnInterval, interval)
+end
+
+local waveDebugState = {}
+
+local function setWaveDebugAttribute(name, value)
+	if waveDebugState[name] == value then
+		return
+	end
+	waveDebugState[name] = value
+	Workspace:SetAttribute(name, value)
+end
+
+local function updateWaveDebugAttributes()
+	local budget = 0
+	local aliveCap = 0
+	local spawnInterval = 0
+
+	if not matchState.ended and matchState.waveActive and matchState.waveNumber > 0 then
+		budget = math.max(0, math.floor(tonumber(matchState.waveBudget) or 0))
+		aliveCap = getWaveAliveCap(matchState.waveNumber)
+		spawnInterval = math.floor(getWaveSpawnInterval(matchState.waveNumber) * 100 + 0.5) / 100
+	end
+
+	setWaveDebugAttribute("WaveBudget", budget)
+	setWaveDebugAttribute("AliveCap", aliveCap)
+	setWaveDebugAttribute("SpawnInterval", spawnInterval)
 end
 
 local function startWave(waveNumber)
 	local totalSpawns, bossSpawns = computeWaveSpawnBudget(waveNumber)
 	matchState.waveNumber = waveNumber
+	matchState.waveBudget = totalSpawns
 	matchState.waveActive = true
 	matchState.waveSpawnsRemaining = totalSpawns
 	matchState.waveBossSpawnsRemaining = bossSpawns
@@ -1065,6 +1168,7 @@ local function startWave(waveNumber)
 	Workspace:SetAttribute("WaveNumber", waveNumber)
 	Workspace:SetAttribute("IsBossWave", bossSpawns > 0)
 	Workspace:SetAttribute("WaveState", bossSpawns > 0 and "BossWaveActive" or "WaveActive")
+	updateWaveDebugAttributes()
 
 	if bossSpawns > 0 then
 		broadcastSurvivalEvent({
@@ -1082,10 +1186,12 @@ end
 local function beginIntermission()
 	local seconds = tonumber(zombieConfig.IntermissionSeconds) or 12
 	matchState.waveActive = false
+	matchState.waveBudget = 0
 	matchState.intermissionEndsAt = os.clock() + seconds
 	matchState.intermissionSecondLastSent = -1
 	Workspace:SetAttribute("IsBossWave", false)
 	Workspace:SetAttribute("WaveState", "Intermission")
+	updateWaveDebugAttributes()
 
 	broadcastSurvivalEvent({
 		type = "match",
@@ -1138,6 +1244,7 @@ local function startNewMatch()
 	matchState.startedAt = os.clock()
 	matchState.ended = false
 	matchState.waveNumber = 0
+	matchState.waveBudget = 0
 	matchState.waveActive = false
 	matchState.waveSpawnsRemaining = 0
 	matchState.waveBossSpawnsRemaining = 0
@@ -1157,6 +1264,7 @@ local function startNewMatch()
 	Workspace:SetAttribute("WaveNumber", 0)
 	Workspace:SetAttribute("IsBossWave", false)
 	Workspace:SetAttribute("WaveState", "PreRun")
+	updateWaveDebugAttributes()
 	broadcastSurvivalEvent({
 		type = "match",
 		text = ("New run started. Difficulty: %s"):format(difficultyKey),
@@ -1207,6 +1315,8 @@ local function endMatch(reason)
 	Workspace:SetAttribute("IsBossWave", false)
 	Workspace:SetAttribute("WaveNumber", matchState.waveNumber or 0)
 	Workspace:SetAttribute("WaveState", "RunResult")
+	matchState.waveBudget = 0
+	updateWaveDebugAttributes()
 	local gameOverText
 	if tostring(reason) == "Victory" then
 		gameOverText = ("Run cleared. %d waves completed. Returning in %ds."):format(matchState.waveNumber or 0, returnDelay)
@@ -1348,6 +1458,7 @@ local function revivePlayer(player, reasonText)
 		else
 			Workspace:SetAttribute("WaveState", "PreRun")
 		end
+		updateWaveDebugAttributes()
 	end
 end
 
@@ -1678,13 +1789,8 @@ local function spawnZombieFromPoint()
 		return
 	end
 
-	local stage = getDifficultyStage()
-	local multipliers = getDifficultyMultipliers()
-	local partySize = #Players:GetPlayers()
-	local maxAlive = math.max(2, zombieConfig.BaseMaxAlive + stage * zombieConfig.MaxAlivePerStage)
-	maxAlive *= getEnemyCountPartyMultiplier(partySize)
-	maxAlive *= multipliers.enemyCount
-	maxAlive = math.max(2, math.floor(maxAlive + 0.5))
+	local stage = getDifficultyStageForWave(matchState.waveNumber)
+	local maxAlive = getWaveAliveCap(matchState.waveNumber)
 	if countAliveZombies() >= maxAlive then
 		return
 	end
@@ -1796,7 +1902,7 @@ task.spawn(function()
 			if matchState.waveActive and not wipeState.active and matchState.waveSpawnsRemaining > 0 then
 				if now >= matchState.nextSpawnAt then
 					spawnZombieFromPoint()
-					matchState.nextSpawnAt = now + getWaveSpawnInterval()
+					matchState.nextSpawnAt = now + getWaveSpawnInterval(matchState.waveNumber)
 				end
 			end
 			task.wait(0.1)
@@ -1811,6 +1917,7 @@ RunService.Heartbeat:Connect(function(deltaTime)
 
 	local now = os.clock()
 	updateWaveDirector(now)
+	updateWaveDebugAttributes()
 
 	local stage = getDifficultyStage()
 	if stage ~= lastStageAttribute then
