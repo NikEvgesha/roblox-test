@@ -189,6 +189,7 @@ Rule: invalid transitions are rejected and logged.
     - `Solo Revive` (`10 Robux`) revives purchaser;
     - `Teammate Revive` (`50 Robux`) revives all downed players.
 - While waiting for respawn, player can spectate/free-fly.
+  - MVP controls: `WASD` move, `Space/Ctrl` up/down, mouse look.
 
 ## Failure Modes
 

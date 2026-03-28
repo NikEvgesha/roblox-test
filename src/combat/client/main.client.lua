@@ -496,7 +496,27 @@ local skillPoints = 0
 local skillStateItems = {}
 local animationTracksByHumanoid = setmetatable({}, { __mode = "k" })
 local SHOP_AUTO_CLOSE_DISTANCE = 15
+local SPECTATOR_MOVE_SPEED = 36
+local SPECTATOR_FAST_MULTIPLIER = 2
+local SPECTATOR_SLOW_MULTIPLIER = 0.45
+local SPECTATOR_MOUSE_SENSITIVITY = 0.0025
+local SPECTATOR_MAX_PITCH = math.rad(82)
 local getCurrentWeapon
+local spectatorModeEnabled = false
+local spectatorIsDowned = false
+local spectatorPosition = Vector3.new(0, 10, 0)
+local spectatorYaw = 0
+local spectatorPitch = 0
+local spectatorInput = {
+	forward = false,
+	back = false,
+	left = false,
+	right = false,
+	up = false,
+	down = false,
+	fast = false,
+	slow = false,
+}
 
 local function hasBlockingUiOpen()
 	return shopFrame.Visible or skillsFrame.Visible or reviveButtonsFrame.Visible
@@ -522,13 +542,194 @@ local function setAimModeEnabled(enabled)
 		UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
 		UserInputService.MouseIconEnabled = false
 	else
-		if UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter then
-			UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+		if not spectatorModeEnabled then
+			if UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter then
+				UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+			end
+			UserInputService.MouseIconEnabled = true
 		end
-		UserInputService.MouseIconEnabled = true
 	end
 
 	updateCrosshairVisibility()
+end
+
+local function clearSpectatorInput()
+	for key in pairs(spectatorInput) do
+		spectatorInput[key] = false
+	end
+end
+
+local function setSpectatorMode(enabled)
+	if spectatorModeEnabled == enabled then
+		return
+	end
+
+	spectatorModeEnabled = enabled
+	local camera = Workspace.CurrentCamera
+
+	if enabled then
+		setAimModeEnabled(false)
+		clearSpectatorInput()
+
+		if camera then
+			local cframe = camera.CFrame
+			spectatorPosition = cframe.Position
+			local look = cframe.LookVector
+			spectatorPitch = math.asin(math.clamp(look.Y, -1, 1))
+			spectatorYaw = math.atan2(-look.X, -look.Z)
+			camera.CameraType = Enum.CameraType.Scriptable
+			camera.CFrame = cframe
+		end
+
+		UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
+		UserInputService.MouseIconEnabled = false
+		return
+	end
+
+	clearSpectatorInput()
+	if camera then
+		camera.CameraType = Enum.CameraType.Custom
+	end
+	UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+	UserInputService.MouseIconEnabled = true
+end
+
+local function setDownedSpectatorState(downed)
+	if spectatorIsDowned == downed then
+		return
+	end
+
+	spectatorIsDowned = downed
+	setSpectatorMode(downed)
+end
+
+local function handleSpectatorInputBegan(input)
+	if input.UserInputType ~= Enum.UserInputType.Keyboard then
+		return false
+	end
+
+	if input.KeyCode == Enum.KeyCode.W then
+		spectatorInput.forward = true
+		return true
+	elseif input.KeyCode == Enum.KeyCode.S then
+		spectatorInput.back = true
+		return true
+	elseif input.KeyCode == Enum.KeyCode.A then
+		spectatorInput.left = true
+		return true
+	elseif input.KeyCode == Enum.KeyCode.D then
+		spectatorInput.right = true
+		return true
+	elseif input.KeyCode == Enum.KeyCode.Space then
+		spectatorInput.up = true
+		return true
+	elseif input.KeyCode == Enum.KeyCode.LeftControl or input.KeyCode == Enum.KeyCode.C then
+		spectatorInput.down = true
+		return true
+	elseif input.KeyCode == Enum.KeyCode.LeftShift then
+		spectatorInput.fast = true
+		return true
+	elseif input.KeyCode == Enum.KeyCode.LeftAlt then
+		spectatorInput.slow = true
+		return true
+	end
+
+	return false
+end
+
+local function handleSpectatorInputEnded(input)
+	if input.UserInputType ~= Enum.UserInputType.Keyboard then
+		return false
+	end
+
+	if input.KeyCode == Enum.KeyCode.W then
+		spectatorInput.forward = false
+		return true
+	elseif input.KeyCode == Enum.KeyCode.S then
+		spectatorInput.back = false
+		return true
+	elseif input.KeyCode == Enum.KeyCode.A then
+		spectatorInput.left = false
+		return true
+	elseif input.KeyCode == Enum.KeyCode.D then
+		spectatorInput.right = false
+		return true
+	elseif input.KeyCode == Enum.KeyCode.Space then
+		spectatorInput.up = false
+		return true
+	elseif input.KeyCode == Enum.KeyCode.LeftControl or input.KeyCode == Enum.KeyCode.C then
+		spectatorInput.down = false
+		return true
+	elseif input.KeyCode == Enum.KeyCode.LeftShift then
+		spectatorInput.fast = false
+		return true
+	elseif input.KeyCode == Enum.KeyCode.LeftAlt then
+		spectatorInput.slow = false
+		return true
+	end
+
+	return false
+end
+
+local function updateSpectatorCamera(deltaTime)
+	if not spectatorModeEnabled then
+		return
+	end
+
+	local camera = Workspace.CurrentCamera
+	if not camera then
+		return
+	end
+
+	local mouseDelta = UserInputService:GetMouseDelta()
+	spectatorYaw -= mouseDelta.X * SPECTATOR_MOUSE_SENSITIVITY
+	spectatorPitch = math.clamp(
+		spectatorPitch - mouseDelta.Y * SPECTATOR_MOUSE_SENSITIVITY,
+		-SPECTATOR_MAX_PITCH,
+		SPECTATOR_MAX_PITCH
+	)
+
+	local horizontalForward = Vector3.new(-math.sin(spectatorYaw), 0, -math.cos(spectatorYaw))
+	local right = Vector3.new(math.cos(spectatorYaw), 0, -math.sin(spectatorYaw))
+
+	local moveDirection = Vector3.zero
+	if spectatorInput.forward then
+		moveDirection += horizontalForward
+	end
+	if spectatorInput.back then
+		moveDirection -= horizontalForward
+	end
+	if spectatorInput.right then
+		moveDirection += right
+	end
+	if spectatorInput.left then
+		moveDirection -= right
+	end
+	if spectatorInput.up then
+		moveDirection += Vector3.new(0, 1, 0)
+	end
+	if spectatorInput.down then
+		moveDirection -= Vector3.new(0, 1, 0)
+	end
+
+	local speed = SPECTATOR_MOVE_SPEED
+	if spectatorInput.fast then
+		speed *= SPECTATOR_FAST_MULTIPLIER
+	elseif spectatorInput.slow then
+		speed *= SPECTATOR_SLOW_MULTIPLIER
+	end
+
+	if moveDirection.Magnitude > 0 then
+		spectatorPosition += moveDirection.Unit * speed * deltaTime
+	end
+
+	local lookDirection = Vector3.new(
+		-math.sin(spectatorYaw) * math.cos(spectatorPitch),
+		math.sin(spectatorPitch),
+		-math.cos(spectatorYaw) * math.cos(spectatorPitch)
+	)
+	camera.CameraType = Enum.CameraType.Scriptable
+	camera.CFrame = CFrame.lookAt(spectatorPosition, spectatorPosition + lookDirection)
 end
 
 local function hideReviveButtons()
@@ -1008,6 +1209,7 @@ local function playWeaponReloadAnimation(weaponKey)
 end
 
 local function bindCharacter(character)
+	setDownedSpectatorState(false)
 	setAimModeEnabled(false)
 	clearAnimationCacheForCharacter(character)
 	setCurrentToolNameByCharacter(character)
@@ -1076,6 +1278,14 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 		return
 	end
 
+	if spectatorModeEnabled and handleSpectatorInputBegan(input) then
+		return
+	end
+
+	if spectatorModeEnabled then
+		return
+	end
+
 	if input.UserInputType == Enum.UserInputType.MouseButton2 then
 		setAimModeEnabled(true)
 		return
@@ -1113,6 +1323,10 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 end)
 
 UserInputService.InputEnded:Connect(function(input)
+	if spectatorModeEnabled and handleSpectatorInputEnded(input) then
+		return
+	end
+
 	if input.UserInputType == Enum.UserInputType.MouseButton2 then
 		setAimModeEnabled(false)
 	end
@@ -1218,35 +1432,42 @@ survivalEvent.OnClientEvent:Connect(function(data)
 	end
 
 	if data.type == "respawn" then
+		setDownedSpectatorState(true)
 		local seconds = tonumber(data.seconds) or 0
 		respawnStatusLabel.Visible = true
 		if typeof(data.text) == "string" and data.text ~= "" then
-			respawnStatusLabel.Text = data.text
+			respawnStatusLabel.Text = ("%s | Spectate: WASD + Space/Ctrl"):format(data.text)
 		else
-			respawnStatusLabel.Text = ("Downed. Auto-respawn in %ds"):format(math.max(0, math.floor(seconds)))
+			respawnStatusLabel.Text = ("Downed. Auto-respawn in %ds | Spectate: WASD + Space/Ctrl")
+				:format(math.max(0, math.floor(seconds)))
 		end
 	elseif data.type == "wipe_timer" then
+		setDownedSpectatorState(true)
 		local seconds = math.max(0, math.floor(tonumber(data.seconds) or 0))
 		respawnStatusLabel.Visible = true
-		respawnStatusLabel.Text = ("Team wipe. Revive window: %ds"):format(seconds)
+		respawnStatusLabel.Text = ("Team wipe. Revive window: %ds | Spectate: WASD + Space/Ctrl"):format(seconds)
 	elseif data.type == "revive_options" then
+		setDownedSpectatorState(true)
 		setAimModeEnabled(false)
 		showReviveButtons(data)
 		if data.wipeOnly then
 			local seconds = math.max(0, math.floor(tonumber(data.seconds) or 0))
 			respawnStatusLabel.Visible = true
-			respawnStatusLabel.Text = ("Team wipe. Buy revive in %ds"):format(seconds)
+			respawnStatusLabel.Text = ("Team wipe. Buy revive in %ds | Spectate: WASD + Space/Ctrl"):format(seconds)
 		end
 	elseif data.type == "revive_options_clear" then
 		hideReviveButtons()
 	elseif data.type == "respawn_clear" then
+		setDownedSpectatorState(false)
 		respawnStatusLabel.Visible = false
 		respawnStatusLabel.Text = ""
 		hideReviveButtons()
 	elseif data.type == "match" then
-		respawnStatusLabel.Visible = false
-		respawnStatusLabel.Text = ""
-		hideReviveButtons()
+		if not spectatorIsDowned then
+			respawnStatusLabel.Visible = false
+			respawnStatusLabel.Text = ""
+			hideReviveButtons()
+		end
 	end
 end)
 
@@ -1262,7 +1483,9 @@ player.CharacterRemoving:Connect(function(character)
 	hideReviveButtons()
 end)
 
-RunService.RenderStepped:Connect(function()
+RunService.RenderStepped:Connect(function(deltaTime)
+	updateSpectatorCamera(deltaTime)
+
 	if hasBlockingUiOpen() and aimModeEnabled then
 		setAimModeEnabled(false)
 	end
