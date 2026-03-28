@@ -508,6 +508,7 @@ local spectatorPosition = Vector3.new(0, 10, 0)
 local spectatorYaw = 0
 local spectatorPitch = 0
 local spectatorLookActive = false
+local rightMouseHeld = false
 local spectatorInput = {
 	forward = false,
 	back = false,
@@ -579,6 +580,25 @@ local function setSpectatorLookActive(enabled)
 	end
 end
 
+local function restoreGameplayCamera()
+	local camera = Workspace.CurrentCamera
+	if not camera then
+		return
+	end
+
+	camera.CameraType = Enum.CameraType.Custom
+
+	local character = player.Character
+	if not character then
+		return
+	end
+
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	if humanoid then
+		camera.CameraSubject = humanoid
+	end
+end
+
 local function setSpectatorMode(enabled)
 	if spectatorModeEnabled == enabled then
 		return
@@ -591,6 +611,7 @@ local function setSpectatorMode(enabled)
 		setAimModeEnabled(false)
 		clearSpectatorInput()
 		spectatorLookActive = false
+		rightMouseHeld = false
 
 		if camera then
 			local cframe = camera.CFrame
@@ -607,21 +628,26 @@ local function setSpectatorMode(enabled)
 		return
 	end
 
+	setSpectatorLookActive(false)
 	clearSpectatorInput()
 	spectatorLookActive = false
+	rightMouseHeld = false
 	if camera then
-		camera.CameraType = Enum.CameraType.Custom
+		restoreGameplayCamera()
 	end
 	UserInputService.MouseBehavior = Enum.MouseBehavior.Default
 	UserInputService.MouseIconEnabled = true
 end
 
 local function setDownedSpectatorState(downed)
-	if spectatorIsDowned == downed then
+	if spectatorIsDowned == downed and (downed or not spectatorModeEnabled) then
 		return
 	end
 
 	spectatorIsDowned = downed
+	if not downed then
+		setSpectatorLookActive(false)
+	end
 	setSpectatorMode(downed)
 end
 
@@ -713,15 +739,20 @@ local function updateSpectatorCamera(deltaTime)
 		)
 	end
 
-	local horizontalForward = Vector3.new(-math.sin(spectatorYaw), 0, -math.cos(spectatorYaw))
+	local lookDirection = Vector3.new(
+		-math.sin(spectatorYaw) * math.cos(spectatorPitch),
+		math.sin(spectatorPitch),
+		-math.cos(spectatorYaw) * math.cos(spectatorPitch)
+	)
+	local forward = lookDirection
 	local right = Vector3.new(math.cos(spectatorYaw), 0, -math.sin(spectatorYaw))
 
 	local moveDirection = Vector3.zero
 	if spectatorInput.forward then
-		moveDirection += horizontalForward
+		moveDirection += forward
 	end
 	if spectatorInput.back then
-		moveDirection -= horizontalForward
+		moveDirection -= forward
 	end
 	if spectatorInput.right then
 		moveDirection += right
@@ -747,11 +778,6 @@ local function updateSpectatorCamera(deltaTime)
 		spectatorPosition += moveDirection.Unit * speed * deltaTime
 	end
 
-	local lookDirection = Vector3.new(
-		-math.sin(spectatorYaw) * math.cos(spectatorPitch),
-		math.sin(spectatorPitch),
-		-math.cos(spectatorYaw) * math.cos(spectatorPitch)
-	)
 	camera.CameraType = Enum.CameraType.Scriptable
 	camera.CFrame = CFrame.lookAt(spectatorPosition, spectatorPosition + lookDirection)
 end
@@ -1241,6 +1267,7 @@ local function bindCharacter(character)
 	local humanoid = character:FindFirstChildOfClass("Humanoid") or character:WaitForChild("Humanoid", 5)
 	if humanoid then
 		bindHumanoid(humanoid)
+		restoreGameplayCamera()
 	end
 
 	character.ChildAdded:Connect(function(child)
@@ -1302,6 +1329,10 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 		return
 	end
 
+	if input.UserInputType == Enum.UserInputType.MouseButton2 then
+		rightMouseHeld = true
+	end
+
 	if spectatorModeEnabled then
 		if input.UserInputType == Enum.UserInputType.MouseButton2 then
 			setSpectatorLookActive(true)
@@ -1352,6 +1383,10 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 end)
 
 UserInputService.InputEnded:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton2 then
+		rightMouseHeld = false
+	end
+
 	if spectatorModeEnabled then
 		if input.UserInputType == Enum.UserInputType.MouseButton2 then
 			setSpectatorLookActive(false)
@@ -1524,6 +1559,14 @@ player.CharacterRemoving:Connect(function(character)
 end)
 
 RunService.RenderStepped:Connect(function(deltaTime)
+	if spectatorModeEnabled and spectatorLookActive and not rightMouseHeld then
+		setSpectatorLookActive(false)
+	end
+
+	if not spectatorModeEnabled and aimModeEnabled and not rightMouseHeld then
+		setAimModeEnabled(false)
+	end
+
 	updateSpectatorCamera(deltaTime)
 
 	if hasBlockingUiOpen() and aimModeEnabled then
