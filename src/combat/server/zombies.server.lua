@@ -233,6 +233,50 @@ local function getDifficultyConfig()
 	}
 end
 
+local function applyTeleportRunConfigFromPlayer(player)
+	if not player then
+		return false
+	end
+
+	local joinData = nil
+	local ok = pcall(function()
+		joinData = player:GetJoinData()
+	end)
+	if not ok or type(joinData) ~= "table" then
+		return false
+	end
+
+	local teleportData = joinData.TeleportData
+	if type(teleportData) ~= "table" then
+		return false
+	end
+
+	local changed = false
+	local requestedDifficulty = teleportData.difficulty
+	if type(requestedDifficulty) == "string"
+		and zombieConfig.Difficulties
+		and zombieConfig.Difficulties[requestedDifficulty]
+	then
+		Workspace:SetAttribute("SelectedDifficulty", requestedDifficulty)
+		Workspace:SetAttribute("Difficulty", requestedDifficulty)
+		changed = true
+	end
+
+	local targetPartySize = tonumber(teleportData.targetPartySize)
+	if targetPartySize then
+		Workspace:SetAttribute("LobbyTargetPartySize", math.max(1, math.floor(targetPartySize)))
+		changed = true
+	end
+
+	local hostUserId = tonumber(teleportData.hostUserId)
+	if hostUserId then
+		Workspace:SetAttribute("LobbyHostUserId", math.floor(hostUserId))
+		changed = true
+	end
+
+	return changed
+end
+
 local function getRewardBonusMultiplier(playerCount)
 	if playerCount <= 1 then
 		return 1
@@ -1562,6 +1606,7 @@ local function setupPlayer(player)
 	state.alive = false
 	state.downed = false
 	state.deathToken += 1
+	applyTeleportRunConfigFromPlayer(player)
 	ensureLeaderstats(player)
 	ensureProgression(player)
 
