@@ -5,6 +5,8 @@ local combatConfig = require(script.Parent:WaitForChild("CombatConfig"))
 local metaConfig = combatConfig.MetaProgression or {}
 local upgradesConfig = metaConfig.Upgrades or {}
 local upgradeOrder = metaConfig.UpgradeOrder or { "Damage", "Health", "Speed" }
+local achievementStatsConfig = combatConfig.AchievementStats or {}
+local achievementStatOrder = achievementStatsConfig.Order or { "RunsPlayed", "BestWave", "TotalKills", "BossKills" }
 local classesConfig = combatConfig.Classes or {}
 local classDefinitions = classesConfig.Definitions or {}
 local classOrder = classesConfig.Order or { "Assault", "Builder", "Healer", "Melee" }
@@ -82,6 +84,18 @@ local function ensureIntValue(parent, name, defaultValue)
 	return value
 end
 
+local function ensureFolder(parent, name)
+	local folder = parent:FindFirstChild(name)
+	if folder and folder:IsA("Folder") then
+		return folder
+	end
+
+	folder = Instance.new("Folder")
+	folder.Name = name
+	folder.Parent = parent
+	return folder
+end
+
 local function ensureStringValue(parent, name, defaultValue)
 	local value = parent:FindFirstChild(name)
 	if value and value:IsA("StringValue") then
@@ -107,11 +121,17 @@ local function buildDefaultProfile()
 		upgrades[upgradeKey] = 0
 	end
 
+	local achievementStats = {}
+	for _, statKey in ipairs(achievementStatOrder) do
+		achievementStats[statKey] = 0
+	end
+
 	return {
 		version = 1,
 		crystals = 0,
 		selectedClass = DEFAULT_CLASS_KEY,
 		upgrades = upgrades,
+		achievementStats = achievementStats,
 		updatedAt = os.time(),
 	}
 end
@@ -129,6 +149,12 @@ local function normalizeProfile(raw)
 	if type(raw.upgrades) == "table" then
 		for _, upgradeKey in ipairs(upgradeOrder) do
 			normalized.upgrades[upgradeKey] = clampUpgradeLevel(upgradeKey, raw.upgrades[upgradeKey])
+		end
+	end
+
+	if type(raw.achievementStats) == "table" then
+		for _, statKey in ipairs(achievementStatOrder) do
+			normalized.achievementStats[statKey] = math.max(0, math.floor(tonumber(raw.achievementStats[statKey]) or 0))
 		end
 	end
 
@@ -157,6 +183,7 @@ local function ensureContainers(player)
 		metaProgression.Name = "MetaProgression"
 		metaProgression.Parent = player
 	end
+	local achievementStatsFolder = ensureFolder(metaProgression, "AchievementStats")
 
 	local money = ensureIntValue(leaderstats, "Money", 0)
 	local xp = ensureIntValue(leaderstats, "XP", 0)
@@ -172,6 +199,10 @@ local function ensureContainers(player)
 	local upgradeValues = {}
 	for _, upgradeKey in ipairs(upgradeOrder) do
 		upgradeValues[upgradeKey] = ensureIntValue(metaProgression, upgradeKey, 0)
+	end
+	local achievementStats = {}
+	for _, statKey in ipairs(achievementStatOrder) do
+		achievementStats[statKey] = ensureIntValue(achievementStatsFolder, statKey, 0)
 	end
 	local selectedClass = ensureStringValue(metaProgression, "SelectedClass", DEFAULT_CLASS_KEY)
 
@@ -189,6 +220,8 @@ local function ensureContainers(player)
 		rangedLevel = rangedLevel,
 		healthLevel = healthLevel,
 		upgrades = upgradeValues,
+		achievementStatsFolder = achievementStatsFolder,
+		achievementStats = achievementStats,
 		selectedClass = selectedClass,
 	}
 end
@@ -217,6 +250,11 @@ local function bindDirtySignals(player, containers)
 	end))
 
 	for _, value in pairs(containers.upgrades) do
+		table.insert(connections, value:GetPropertyChangedSignal("Value"):Connect(function()
+			dirtyByUserId[player.UserId] = true
+		end))
+	end
+	for _, value in pairs(containers.achievementStats) do
 		table.insert(connections, value:GetPropertyChangedSignal("Value"):Connect(function()
 			dirtyByUserId[player.UserId] = true
 		end))
@@ -280,6 +318,9 @@ function ProfileStore.Load(player)
 	for upgradeKey, value in pairs(containers.upgrades) do
 		value.Value = profile.upgrades[upgradeKey] or 0
 	end
+	for statKey, value in pairs(containers.achievementStats) do
+		value.Value = profile.achievementStats[statKey] or 0
+	end
 
 	loadedByUserId[player.UserId] = true
 	dirtyByUserId[player.UserId] = false
@@ -297,6 +338,9 @@ function ProfileStore.Capture(player)
 
 	for upgradeKey, value in pairs(containers.upgrades) do
 		profile.upgrades[upgradeKey] = clampUpgradeLevel(upgradeKey, value.Value)
+	end
+	for statKey, value in pairs(containers.achievementStats) do
+		profile.achievementStats[statKey] = math.max(0, math.floor(tonumber(value.Value) or 0))
 	end
 
 	profile.updatedAt = os.time()
@@ -343,6 +387,7 @@ function ProfileStore.Save(player, force)
 			merged.crystals = snapshot.crystals
 			merged.selectedClass = snapshot.selectedClass
 			merged.upgrades = snapshot.upgrades
+			merged.achievementStats = snapshot.achievementStats
 			merged.updatedAt = snapshot.updatedAt
 			return merged
 		end)

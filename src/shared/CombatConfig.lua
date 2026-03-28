@@ -60,6 +60,15 @@ return {
 		},
 	},
 
+	AchievementStats = {
+		Order = {
+			"RunsPlayed",
+			"BestWave",
+			"TotalKills",
+			"BossKills",
+		},
+	},
+
 	MetaProgression = {
 		DataStoreName = "HeroicSurvivalProfile_v1",
 		AutoSaveIntervalSeconds = 90,

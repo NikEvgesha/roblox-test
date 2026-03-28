@@ -176,6 +176,11 @@ Rule: invalid transitions are rejected and logged.
   - crystal purchase in lobby;
   - achievement completion.
 - Achievement state and unlocked characters persist between runs.
+- MVP persistent stat counters:
+  - `RunsPlayed`
+  - `BestWave`
+  - `TotalKills`
+  - `BossKills`
 
 ## Death / Respawn Rules (Locked Baseline)
 

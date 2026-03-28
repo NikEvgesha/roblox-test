@@ -8,9 +8,12 @@ local TeleportService = game:GetService("TeleportService")
 
 local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local combatConfig = require(sharedFolder:WaitForChild("CombatConfig"))
+local profileStore = require(sharedFolder:WaitForChild("ProfileStore"))
 
 local zombieConfig = combatConfig.Zombies
 local progressionConfig = combatConfig.Progression
+local achievementStatsConfig = combatConfig.AchievementStats or {}
+local achievementStatOrder = achievementStatsConfig.Order or { "RunsPlayed", "BestWave", "TotalKills", "BossKills" }
 local variantConfig = zombieConfig.Variants or {}
 local difficultySchedule = zombieConfig.DifficultySchedule or { { MinTime = 0, Weights = { Walker = 100 } } }
 local waveTable = zombieConfig.WaveTable or {}
@@ -22,6 +25,12 @@ local SPAWN_POINTS_FOLDER_NAME = "ZombieSpawnPoints"
 local DOWNED_FOLDER_NAME = "DownedPlayers"
 local GAME_POINTS_FOLDER_NAME = "GamePoints"
 local START_SPAWN_NAME = "StartSpawn"
+local ACHIEVEMENT_STATS_FOLDER_NAME = "AchievementStats"
+
+local achievementStatSet = {}
+for _, statKey in ipairs(achievementStatOrder) do
+	achievementStatSet[statKey] = true
+end
 
 local function ensureRemoteEvent(name)
 	local event = ReplicatedStorage:FindFirstChild(name)
@@ -136,6 +145,95 @@ local function ensureIntStat(parent, name, defaultValue)
 	stat.Value = defaultValue
 	stat.Parent = parent
 	return stat
+end
+
+local function ensureAchievementStatsFolder(player)
+	local metaProgression = player:FindFirstChild("MetaProgression")
+	if not metaProgression then
+		metaProgression = Instance.new("Folder")
+		metaProgression.Name = "MetaProgression"
+		metaProgression.Parent = player
+	end
+
+	local statsFolder = metaProgression:FindFirstChild(ACHIEVEMENT_STATS_FOLDER_NAME)
+	if statsFolder and statsFolder:IsA("Folder") then
+		return statsFolder
+	end
+
+	statsFolder = Instance.new("Folder")
+	statsFolder.Name = ACHIEVEMENT_STATS_FOLDER_NAME
+	statsFolder.Parent = metaProgression
+	return statsFolder
+end
+
+local function ensureAchievementStatValue(player, statKey)
+	if not achievementStatSet[statKey] then
+		return nil
+	end
+
+	local statsFolder = ensureAchievementStatsFolder(player)
+	return ensureIntStat(statsFolder, statKey, 0)
+end
+
+local function addAchievementStat(player, statKey, delta)
+	if not player or player.Parent ~= Players then
+		return
+	end
+
+	if player:GetAttribute("PersistentProfileLoaded") ~= true then
+		return
+	end
+
+	local value = ensureAchievementStatValue(player, statKey)
+	if not value then
+		return
+	end
+
+	local step = math.floor(tonumber(delta) or 0)
+	if step == 0 then
+		return
+	end
+
+	value.Value = math.max(0, value.Value + step)
+	player:SetAttribute(("Achievement_%s"):format(statKey), value.Value)
+	profileStore.MarkDirty(player)
+end
+
+local function setAchievementStatMax(player, statKey, candidateValue)
+	if not player or player.Parent ~= Players then
+		return
+	end
+
+	if player:GetAttribute("PersistentProfileLoaded") ~= true then
+		return
+	end
+
+	local value = ensureAchievementStatValue(player, statKey)
+	if not value then
+		return
+	end
+
+	local candidate = math.max(0, math.floor(tonumber(candidateValue) or 0))
+	if candidate <= value.Value then
+		return
+	end
+
+	value.Value = candidate
+	player:SetAttribute(("Achievement_%s"):format(statKey), value.Value)
+	profileStore.MarkDirty(player)
+end
+
+local function syncAchievementAttributes(player)
+	if not player or player.Parent ~= Players then
+		return
+	end
+
+	for _, statKey in ipairs(achievementStatOrder) do
+		local value = ensureAchievementStatValue(player, statKey)
+		if value then
+			player:SetAttribute(("Achievement_%s"):format(statKey), value.Value)
+		end
+	end
 end
 
 local function ensureProgression(player)
@@ -317,6 +415,7 @@ local function awardZombieKillToParty(rewardMoney, rewardXP)
 	for _, player in ipairs(players) do
 		addMoney(player, moneyPerPlayer)
 		addXp(player, xpPerPlayer)
+		addAchievementStat(player, "TotalKills", 1)
 	end
 end
 
@@ -354,9 +453,32 @@ local function getPlayerState(player)
 		deathToken = 0,
 		deathCount = 0,
 		downedMarker = nil,
+		runsCountedRunId = 0,
 	}
 	playerStates[player] = state
 	return state
+end
+
+local function ensureRunParticipationStat(player)
+	if not player or player.Parent ~= Players then
+		return
+	end
+
+	if matchState.ended then
+		return
+	end
+
+	local state = getPlayerState(player)
+	if state.runsCountedRunId == matchState.runId then
+		return
+	end
+
+	if player:GetAttribute("PersistentProfileLoaded") ~= true then
+		return
+	end
+
+	addAchievementStat(player, "RunsPlayed", 1)
+	state.runsCountedRunId = matchState.runId
 end
 
 local function removeDownedMarker(player)
@@ -933,6 +1055,7 @@ local function createZombie(position, variantKey, stage)
 		explosionDamage = (variant.ExplosionDamage or 0) * (1 + stage * zombieConfig.DamageScalePerStage) * multipliers.damage,
 		explosionTriggerRange = variant.ExplosionTriggerRange or 0,
 		flyHeight = variant.FlyHeight or 0,
+		isBoss = variant.IsBoss == true,
 	}
 
 	zombieStates[zombie] = state
@@ -947,6 +1070,11 @@ local function createZombie(position, variantKey, stage)
 
 		if not matchState.ended then
 			awardZombieKillToParty(state.rewardMoney, state.rewardXP)
+			if state.isBoss then
+				for _, player in ipairs(Players:GetPlayers()) do
+					addAchievementStat(player, "BossKills", 1)
+				end
+			end
 			if state.bossCrystals > 0 then
 				awardBossCrystalsToParty(state.bossCrystals)
 			end
@@ -1170,6 +1298,10 @@ local function startWave(waveNumber)
 	Workspace:SetAttribute("WaveState", bossSpawns > 0 and "BossWaveActive" or "WaveActive")
 	updateWaveDebugAttributes()
 
+	for _, player in ipairs(Players:GetPlayers()) do
+		setAchievementStatMax(player, "BestWave", waveNumber)
+	end
+
 	if bossSpawns > 0 then
 		broadcastSurvivalEvent({
 			type = "match",
@@ -1280,6 +1412,8 @@ local function startNewMatch()
 		state.downed = false
 		state.deathCount = 0
 		state.deathToken += 1
+		state.runsCountedRunId = 0
+		ensureRunParticipationStat(player)
 		safeLoadCharacter(player)
 	end
 
@@ -1746,6 +1880,17 @@ local function setupPlayer(player)
 	applyTeleportRunConfigFromPlayer(player)
 	ensureLeaderstats(player)
 	ensureProgression(player)
+
+	player:GetAttributeChangedSignal("PersistentProfileLoaded"):Connect(function()
+		if player:GetAttribute("PersistentProfileLoaded") == true then
+			syncAchievementAttributes(player)
+			ensureRunParticipationStat(player)
+		end
+	end)
+	if player:GetAttribute("PersistentProfileLoaded") == true then
+		syncAchievementAttributes(player)
+		ensureRunParticipationStat(player)
+	end
 
 	player.CharacterAdded:Connect(function(character)
 		onCharacterAdded(player, character)
