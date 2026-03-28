@@ -53,6 +53,7 @@ Define the MVP gameplay loop contract for cooperative wave survival:
 | `WaveActive` | Server | Wave enemies spawned | All enemies dead or full team wipe | 45-180s |
 | `Intermission` | Server | Wave completed | Next wave selected/reached | 20-60s |
 | `BossWaveActive` | Server | Boss checkpoint wave | Boss dead or full team wipe | 60-240s |
+| `WipeWindow` | Server | All players downed | Paid revive succeeds or timer expires | 30s |
 | `RunResult` | Server | Win/lose condition reached | Rewards and summary sent | 10s |
 | `ReturnToLobby` | Server | `RunResult` finished | Teleport back confirmed | 30s |
 
@@ -71,6 +72,7 @@ Rule: invalid transitions are rejected and logged.
 - `PAID_SOLO_RESPAWN = 10 Robux (fixed)`
 - `TEAMMATE_REVIVE_WHEN_ALL_DEAD = 50 Robux`
 - `FULL_TEAM_WIPE_PURCHASE_WINDOW = 30s`
+- `RETURN_TO_LOBBY_DELAY_AFTER_WIPE = 0s`
 
 ## Data Contract (MVP)
 

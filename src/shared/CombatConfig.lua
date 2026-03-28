@@ -169,6 +169,8 @@ return {
 			SoloReviveRobux = 10,
 			TeamReviveRobux = 50,
 		},
+		ReturnToLobbyDelayAfterWipe = 0,
+		ReturnToLobbyDelayAfterVictory = 12,
 		RestartDelayAfterWipe = 12,
 
 		KillCreditTimeout = 15,

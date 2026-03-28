@@ -1064,6 +1064,7 @@ local function startWave(waveNumber)
 
 	Workspace:SetAttribute("WaveNumber", waveNumber)
 	Workspace:SetAttribute("IsBossWave", bossSpawns > 0)
+	Workspace:SetAttribute("WaveState", bossSpawns > 0 and "BossWaveActive" or "WaveActive")
 
 	if bossSpawns > 0 then
 		broadcastSurvivalEvent({
@@ -1084,6 +1085,7 @@ local function beginIntermission()
 	matchState.intermissionEndsAt = os.clock() + seconds
 	matchState.intermissionSecondLastSent = -1
 	Workspace:SetAttribute("IsBossWave", false)
+	Workspace:SetAttribute("WaveState", "Intermission")
 
 	broadcastSurvivalEvent({
 		type = "match",
@@ -1154,6 +1156,7 @@ local function startNewMatch()
 	Workspace:SetAttribute("Difficulty", difficultyKey)
 	Workspace:SetAttribute("WaveNumber", 0)
 	Workspace:SetAttribute("IsBossWave", false)
+	Workspace:SetAttribute("WaveState", "PreRun")
 	broadcastSurvivalEvent({
 		type = "match",
 		text = ("New run started. Difficulty: %s"):format(difficultyKey),
@@ -1181,11 +1184,20 @@ local function startNewMatch()
 	end)
 end
 
+local function getReturnDelayForReason(reason)
+	local fallback = math.max(0, tonumber(zombieConfig.RestartDelayAfterWipe) or 12)
+	if tostring(reason) == "Victory" then
+		return math.max(0, tonumber(zombieConfig.ReturnToLobbyDelayAfterVictory) or fallback)
+	end
+	return math.max(0, tonumber(zombieConfig.ReturnToLobbyDelayAfterWipe) or fallback)
+end
+
 local function endMatch(reason)
 	if matchState.ended then
 		return
 	end
 
+	local returnDelay = getReturnDelayForReason(reason)
 	matchState.ended = true
 	wipeState.active = false
 	wipeState.endsAt = 0
@@ -1194,9 +1206,14 @@ local function endMatch(reason)
 	Workspace:SetAttribute("SurvivalReason", reason or "All players down")
 	Workspace:SetAttribute("IsBossWave", false)
 	Workspace:SetAttribute("WaveNumber", matchState.waveNumber or 0)
-	local gameOverText = ("Game over. Returning in %ds."):format(zombieConfig.RestartDelayAfterWipe)
+	Workspace:SetAttribute("WaveState", "RunResult")
+	local gameOverText
 	if tostring(reason) == "Victory" then
-		gameOverText = ("Run cleared. %d waves completed. Returning in %ds."):format(matchState.waveNumber or 0, zombieConfig.RestartDelayAfterWipe)
+		gameOverText = ("Run cleared. %d waves completed. Returning in %ds."):format(matchState.waveNumber or 0, returnDelay)
+	elseif returnDelay > 0 then
+		gameOverText = ("Game over. Returning in %ds."):format(returnDelay)
+	else
+		gameOverText = "Game over. Returning to lobby..."
 	end
 	broadcastSurvivalEvent({
 		type = "match",
@@ -1214,7 +1231,7 @@ local function endMatch(reason)
 	table.clear(pendingProductRequests)
 
 	local currentRunId = matchState.runId
-	task.delay(zombieConfig.RestartDelayAfterWipe, function()
+	task.delay(returnDelay, function()
 		if matchState.runId ~= currentRunId then
 			return
 		end
@@ -1257,6 +1274,7 @@ local function beginWipeWindow()
 	local wipeToken = wipeState.token
 	local duration = tonumber(zombieConfig.WipePurchaseWindowSeconds) or 30
 	wipeState.endsAt = os.clock() + duration
+	Workspace:SetAttribute("WaveState", "WipeWindow")
 
 	broadcastSurvivalEvent({
 		type = "match",
@@ -1322,6 +1340,14 @@ local function revivePlayer(player, reasonText)
 		wipeState.endsAt = 0
 		wipeState.token += 1
 		clearReviveOptions()
+
+		if matchState.waveActive then
+			Workspace:SetAttribute("WaveState", isBossWave(matchState.waveNumber) and "BossWaveActive" or "WaveActive")
+		elseif matchState.intermissionEndsAt > 0 then
+			Workspace:SetAttribute("WaveState", "Intermission")
+		else
+			Workspace:SetAttribute("WaveState", "PreRun")
+		end
 	end
 end
 
