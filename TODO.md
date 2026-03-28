@@ -1,12 +1,22 @@
 # TODO (RobloxProject)
 
-Last updated: `2026-03-15`
+Last updated: `2026-03-27`
 
 ## Snapshot
 
-- Health: `green`
-- Current phase: `foundation + vertical slice backlog ready`
-- Top blocker: `complete onboarding on all 3 machines (IGR-5)`
+- Health: `planning-locked`
+- Current phase: `MVP documentation locked + sprint 1 shaping`
+- Top blocker: `class kit details still open`
+
+## Documentation Baseline (Current)
+
+- `Docs/GDD_MVP.md`
+- `Docs/CLASS_ABILITY_SHEET_V1.md`
+- `Docs/GAMEPLAY_LOOP_SYSTEM_SPEC.md`
+- `Docs/GAMEPLAY_LOOP_SYSTEM_SETUP.md`
+- `Docs/GAMEPLAY_LOOP_TEST_PLAN.md`
+- `Docs/MVP_TASK_BOARD.md`
+- `Docs/OPEN_QUESTIONS.md`
 
 ## Linear Sync (Roblox Test MVP)
 
@@ -22,6 +32,36 @@ Current top queue:
 | `IGR-7` | `Todo` | `High` | `Core Loop Vertical Slice` | Gameplay loop spec v1 |
 | `IGR-8` | `Todo` | `High` | `Core Loop Vertical Slice` | Server round state machine skeleton |
 | `IGR-9` | `Todo` | `High` | `Core Loop Vertical Slice` | Client HUD for round state |
+
+## Local MVP Queue (Pre-Linear sync)
+
+| Task ID | Status | Owner | Deliverable |
+|---|---|---|---|
+| `A-2` | `Done` | `Assistant` | Match start policy locked (solo allowed, fixed-wave mode, wave target baseline 100) |
+| `B-4` | `Done` | `Shared` | Wave target baseline locked to 100 (tunable upward) |
+| `C-2` | `Done` | `Assistant` | Ability sheet v1 with level points + ULT gating + rank cap policy |
+| `R-1` | `Done` | `Shared` | Death flow locked (no penalty, free timer 10s +10s/death, paid solo/team revive) |
+| `B-2` | `Backlog` | `Assistant` | First stable wave loop in server runtime |
+| `A-5` | `Backlog` | `Assistant` | Queue-pad host flow (join limits + start logic) |
+| `B-5` | `Backlog` | `Assistant` | Player-count scaling + difficulty modifiers |
+| `D-2` | `Backlog` | `Assistant` | Shop flow between waves (with draft UI) |
+| `D-5` | `Backlog` | `Assistant` | Persistent boss crystals + lobby upgrade spend |
+| `D-6` | `Backlog` | `Assistant` | Paid revive flow (Solo 10R$ / Team 50R$ on wipe) |
+| `D-7` | `Backlog` | `Assistant` | Shared kill rewards with group bonus split |
+| `D-8` | `Backlog` | `Assistant` | Character unlocks via crystal shop + achievements |
+| `C-5` | `Backlog` | `Assistant` | Universal infinite stat node (`Endless Mastery`) |
+| `E-5` | `Backlog` | `Assistant` | Spectate/free-fly flow while dead |
+| `E-3` | `Backlog` | `You` | Final UI visual pass |
+
+## Sprint 1 Draft (5 Tasks)
+
+| Sprint Task | Owner | Status | Exit Criteria |
+|---|---|---|---|
+| `S1-1` Implement teleport Lobby -> Combat (`A-3`) | Assistant | Backlog | Party reliably reaches combat place |
+| `S1-2` Implement wave loop core (`B-2`) | Assistant | Backlog | 3+ wave cycle stable in Play Test |
+| `S1-3` Implement boss interval logic (`B-3`) | Assistant | Backlog | Boss spawns every 10th wave |
+| `S1-4` Place lobby/combat visual pass v0 (`A-4` + map prep) | You | Backlog | Functional visual landmarks and play space |
+| `S1-5` Build draft HUD for waves/shop (`E-2`) | Assistant | Backlog | Playable temporary HUD for loop validation |
 
 ## Daily Cycle (Required)
 

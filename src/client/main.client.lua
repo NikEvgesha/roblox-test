@@ -11,6 +11,7 @@ local COMBAT_STATE_EVENT_NAME = "CombatState"
 local SHOP_EVENT_NAME = "ShopEvent"
 local SKILL_EVENT_NAME = "SkillEvent"
 local SURVIVAL_EVENT_NAME = "SurvivalEvent"
+local REVIVE_PURCHASE_EVENT_NAME = "RevivePurchaseEvent"
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -24,6 +25,7 @@ local combatStateEvent = ReplicatedStorage:WaitForChild(COMBAT_STATE_EVENT_NAME)
 local shopEvent = ReplicatedStorage:WaitForChild(SHOP_EVENT_NAME)
 local skillEvent = ReplicatedStorage:WaitForChild(SKILL_EVENT_NAME)
 local survivalEvent = ReplicatedStorage:WaitForChild(SURVIVAL_EVENT_NAME)
+local revivePurchaseEvent = ReplicatedStorage:WaitForChild(REVIVE_PURCHASE_EVENT_NAME)
 
 local legacyGui = playerGui:FindFirstChild("NpcDialogGui")
 if legacyGui and legacyGui:IsA("ScreenGui") then
@@ -133,6 +135,52 @@ respawnStatusLabel.TextSize = 15
 respawnStatusLabel.Text = ""
 respawnStatusLabel.Visible = false
 respawnStatusLabel.Parent = gui
+
+local reviveButtonsFrame = Instance.new("Frame")
+reviveButtonsFrame.Name = "ReviveButtonsFrame"
+reviveButtonsFrame.AnchorPoint = Vector2.new(0.5, 0)
+reviveButtonsFrame.Position = UDim2.fromScale(0.5, 0.1)
+reviveButtonsFrame.Size = UDim2.fromOffset(560, 40)
+reviveButtonsFrame.BackgroundTransparency = 1
+reviveButtonsFrame.Visible = false
+reviveButtonsFrame.Parent = gui
+
+local reviveLayout = Instance.new("UIListLayout")
+reviveLayout.FillDirection = Enum.FillDirection.Horizontal
+reviveLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+reviveLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+reviveLayout.Padding = UDim.new(0, 12)
+reviveLayout.Parent = reviveButtonsFrame
+
+local soloReviveButton = Instance.new("TextButton")
+soloReviveButton.Name = "SoloReviveButton"
+soloReviveButton.Size = UDim2.fromOffset(220, 34)
+soloReviveButton.BackgroundColor3 = Color3.fromRGB(86, 130, 86)
+soloReviveButton.TextColor3 = Color3.fromRGB(245, 245, 245)
+soloReviveButton.Font = Enum.Font.GothamBold
+soloReviveButton.TextSize = 14
+soloReviveButton.Text = "Solo Revive"
+soloReviveButton.Visible = false
+soloReviveButton.Parent = reviveButtonsFrame
+
+local soloReviveCorner = Instance.new("UICorner")
+soloReviveCorner.CornerRadius = UDim.new(0, 8)
+soloReviveCorner.Parent = soloReviveButton
+
+local teamReviveButton = Instance.new("TextButton")
+teamReviveButton.Name = "TeamReviveButton"
+teamReviveButton.Size = UDim2.fromOffset(220, 34)
+teamReviveButton.BackgroundColor3 = Color3.fromRGB(118, 88, 146)
+teamReviveButton.TextColor3 = Color3.fromRGB(245, 245, 245)
+teamReviveButton.Font = Enum.Font.GothamBold
+teamReviveButton.TextSize = 14
+teamReviveButton.Text = "Team Revive"
+teamReviveButton.Visible = false
+teamReviveButton.Parent = reviveButtonsFrame
+
+local teamReviveCorner = Instance.new("UICorner")
+teamReviveCorner.CornerRadius = UDim.new(0, 8)
+teamReviveCorner.Parent = teamReviveButton
 
 local openSkillsButton = Instance.new("TextButton")
 openSkillsButton.Name = "OpenSkillsButton"
@@ -514,7 +562,7 @@ local SHOP_AUTO_CLOSE_DISTANCE = 15
 local getCurrentWeapon
 
 local function hasBlockingUiOpen()
-	return dialogFrame.Visible or shopFrame.Visible or skillsFrame.Visible
+	return dialogFrame.Visible or shopFrame.Visible or skillsFrame.Visible or reviveButtonsFrame.Visible
 end
 
 local function updateCrosshairVisibility()
@@ -544,6 +592,25 @@ local function setAimModeEnabled(enabled)
 	end
 
 	updateCrosshairVisibility()
+end
+
+local function hideReviveButtons()
+	reviveButtonsFrame.Visible = false
+	soloReviveButton.Visible = false
+	teamReviveButton.Visible = false
+end
+
+local function showReviveButtons(data)
+	local canSolo = data.canSolo == true
+	local canTeam = data.canTeam == true
+	local soloPrice = tonumber(data.soloPrice) or 10
+	local teamPrice = tonumber(data.teamPrice) or 50
+
+	soloReviveButton.Text = ("Solo Revive (%d R$)"):format(soloPrice)
+	teamReviveButton.Text = ("Team Revive (%d R$)"):format(teamPrice)
+	soloReviveButton.Visible = canSolo
+	teamReviveButton.Visible = canTeam
+	reviveButtonsFrame.Visible = canSolo or canTeam
 end
 
 local function getShopkeeperRoot()
@@ -1110,6 +1177,10 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 		return
 	end
 
+	if reviveButtonsFrame.Visible then
+		return
+	end
+
 	if input.KeyCode == Enum.KeyCode.B then
 		setAimModeEnabled(false)
 		shopEvent:FireServer("open")
@@ -1156,6 +1227,14 @@ end)
 closeSkillsButton.MouseButton1Click:Connect(function()
 	setAimModeEnabled(false)
 	skillsFrame.Visible = false
+end)
+
+soloReviveButton.MouseButton1Click:Connect(function()
+	revivePurchaseEvent:FireServer("request_solo")
+end)
+
+teamReviveButton.MouseButton1Click:Connect(function()
+	revivePurchaseEvent:FireServer("request_team")
 end)
 
 openDialogEvent.OnClientEvent:Connect(function(data)
@@ -1260,13 +1339,33 @@ survivalEvent.OnClientEvent:Connect(function(data)
 	if data.type == "respawn" then
 		local seconds = tonumber(data.seconds) or 0
 		respawnStatusLabel.Visible = true
-		respawnStatusLabel.Text = ("Downed. Auto-respawn in %ds"):format(math.max(0, math.floor(seconds)))
+		if typeof(data.text) == "string" and data.text ~= "" then
+			respawnStatusLabel.Text = data.text
+		else
+			respawnStatusLabel.Text = ("Downed. Auto-respawn in %ds"):format(math.max(0, math.floor(seconds)))
+		end
+	elseif data.type == "wipe_timer" then
+		local seconds = math.max(0, math.floor(tonumber(data.seconds) or 0))
+		respawnStatusLabel.Visible = true
+		respawnStatusLabel.Text = ("Team wipe. Revive window: %ds"):format(seconds)
+	elseif data.type == "revive_options" then
+		setAimModeEnabled(false)
+		showReviveButtons(data)
+		if data.wipeOnly then
+			local seconds = math.max(0, math.floor(tonumber(data.seconds) or 0))
+			respawnStatusLabel.Visible = true
+			respawnStatusLabel.Text = ("Team wipe. Buy revive in %ds"):format(seconds)
+		end
+	elseif data.type == "revive_options_clear" then
+		hideReviveButtons()
 	elseif data.type == "respawn_clear" then
 		respawnStatusLabel.Visible = false
 		respawnStatusLabel.Text = ""
+		hideReviveButtons()
 	elseif data.type == "match" then
 		respawnStatusLabel.Visible = false
 		respawnStatusLabel.Text = ""
+		hideReviveButtons()
 	end
 end)
 
@@ -1279,6 +1378,7 @@ player.CharacterAdded:Connect(bindCharacter)
 player.CharacterRemoving:Connect(function(character)
 	clearAnimationCacheForCharacter(character)
 	setAimModeEnabled(false)
+	hideReviveButtons()
 end)
 
 RunService.RenderStepped:Connect(function()
@@ -1310,3 +1410,4 @@ refreshCombatHud()
 refreshHealthHud()
 refreshXpHud()
 refreshSkillPointsBadge()
+hideReviveButtons()

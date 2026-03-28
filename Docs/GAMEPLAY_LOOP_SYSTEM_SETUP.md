@@ -2,14 +2,18 @@
 
 ## Purpose
 
-Describe how gameplay loop code is wired between local files and Roblox Studio runtime.
+Describe runtime setup for a two-place structure (`Lobby Place` + `Combat Place`) in the current Rojo pipeline.
 
-## Required Files
+## Required Files (MVP)
 
 - `src/server/main.server.lua`
 - `src/server/boot.server.lua`
+- `src/server/combat.server.lua`
+- `src/server/zombies.server.lua`
+- `src/server/skills.server.lua`
 - `src/client/main.client.lua`
 - `src/shared/Shared.lua`
+- `src/shared/CombatConfig.lua`
 - `default.project.json`
 
 ## Rojo Mapping
@@ -21,25 +25,37 @@ Describe how gameplay loop code is wired between local files and Roblox Studio r
 ## Local Setup
 
 1. `aftman install`
-2. `rojo serve`
-3. Connect Rojo plugin to `localhost:34872`
-4. Verify server/client scripts appear in Explorer
+2. `rojo serve default.project.json`
+3. In Studio (Rojo plugin), click `Connect` to `localhost:34872`
+4. Verify Rojo-managed scripts are visible in Explorer
 
-## Studio Runtime Wiring
+## Place Setup Checklist
 
-1. Keep Team Create enabled for world collaboration.
-2. Do not edit Rojo-managed scripts directly in Studio.
-3. World-only edits are allowed in Studio and must be logged in `Docs/WORLD_CHANGELOG.md`.
+1. Prepare 2 places in the same experience:
+   - `Lobby Place`
+   - `Combat Place`
+2. Store both `placeId` values in server config (TBD: final config path).
+3. Confirm teleport from lobby to combat and back is enabled.
+4. Configure spawn zones and safe start points in both places.
+
+## Runtime Wiring
+
+1. `main.server.lua` starts core match/run services.
+2. `combat.server.lua` controls run and intermission states.
+3. `zombies.server.lua` handles wave spawn and enemy lifecycle.
+4. `skills.server.lua` handles class selection and skill upgrades.
+5. `main.client.lua` consumes run state, HUD, shop, and skill events.
 
 ## Collaboration Rules
 
-- One issue -> one branch -> one merge.
-- No direct push to `master`.
-- Every gameplay loop change references a Linear issue key in commit message.
+- One task -> one branch -> one merge.
+- No direct pushes to `main`.
+- Any gameplay behavior change must update docs in `Docs`.
 
 ## Validation Check
 
 Pass when all are true:
-1. Output shows server log from `main.server.lua`.
-2. Output shows client log from `main.client.lua`.
-3. Play session starts without script permission/sync errors.
+1. Server starts with no runtime error.
+2. Client loads with no UI/Remote runtime error.
+3. At least one full cycle runs: `WavePrep -> WaveActive -> Intermission`.
+4. Rojo reconnect does not break active gameplay.

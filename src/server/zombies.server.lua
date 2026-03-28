@@ -3,6 +3,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 local Debris = game:GetService("Debris")
+local MarketplaceService = game:GetService("MarketplaceService")
+local TeleportService = game:GetService("TeleportService")
 
 local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local combatConfig = require(sharedFolder:WaitForChild("CombatConfig"))
@@ -13,6 +15,7 @@ local variantConfig = zombieConfig.Variants or {}
 local difficultySchedule = zombieConfig.DifficultySchedule or { { MinTime = 0, Weights = { Walker = 100 } } }
 
 local SURVIVAL_EVENT_NAME = "SurvivalEvent"
+local REVIVE_PURCHASE_EVENT_NAME = "RevivePurchaseEvent"
 local ZOMBIES_FOLDER_NAME = "Zombies"
 local SPAWN_POINTS_FOLDER_NAME = "ZombieSpawnPoints"
 local DOWNED_FOLDER_NAME = "DownedPlayers"
@@ -32,6 +35,7 @@ local function ensureRemoteEvent(name)
 end
 
 local survivalEvent = ensureRemoteEvent(SURVIVAL_EVENT_NAME)
+local revivePurchaseEvent = ensureRemoteEvent(REVIVE_PURCHASE_EVENT_NAME)
 
 local function sendSurvivalEventToPlayer(player, payload)
 	if player and player.Parent then
@@ -90,12 +94,27 @@ local startSpawn = ensureStartSpawn()
 
 local zombieStates = {}
 local playerStates = {}
+local pendingProductRequests = {}
+local processedReceipts = {}
+local wipeState = {
+	active = false,
+	token = 0,
+	endsAt = 0,
+}
+local clearReviveOptions
 
 local matchState = {
 	runId = 0,
 	startedAt = 0,
 	ended = true,
 }
+
+local reviveProducts = zombieConfig.ReviveProducts or {}
+local reviveDisplayPrices = zombieConfig.ReviveDisplayPrices or {}
+local soloReviveProductId = tonumber(reviveProducts.SoloReviveProductId) or 0
+local teamReviveProductId = tonumber(reviveProducts.TeamReviveProductId) or 0
+local soloReviveRobux = tonumber(reviveDisplayPrices.SoloReviveRobux) or 10
+local teamReviveRobux = tonumber(reviveDisplayPrices.TeamReviveRobux) or 50
 
 local function ensureIntStat(parent, name, defaultValue)
 	local stat = parent:FindFirstChild(name)
@@ -160,15 +179,102 @@ local function addXp(player, amount)
 	end
 end
 
-local function awardZombieKill(player, rewardMoney, rewardXP)
+local function ensureLeaderstats(player)
 	local leaderstats = player:FindFirstChild("leaderstats")
 	if not leaderstats then
+		leaderstats = Instance.new("Folder")
+		leaderstats.Name = "leaderstats"
+		leaderstats.Parent = player
+	end
+
+	ensureIntStat(leaderstats, "Money", 0)
+	ensureIntStat(leaderstats, "XP", 0)
+	ensureIntStat(leaderstats, "Level", 1)
+	ensureIntStat(leaderstats, "Crystals", 0)
+	return leaderstats
+end
+
+local function addMoney(player, amount)
+	local leaderstats = ensureLeaderstats(player)
+	local money = ensureIntStat(leaderstats, "Money", 0)
+	money.Value += math.max(0, math.floor((amount or 0) + 0.5))
+end
+
+local function addCrystals(player, amount)
+	local leaderstats = ensureLeaderstats(player)
+	local crystals = ensureIntStat(leaderstats, "Crystals", 0)
+	crystals.Value += math.max(0, math.floor((amount or 0) + 0.5))
+end
+
+local function getDifficultyKey()
+	local configured = Workspace:GetAttribute("SelectedDifficulty")
+	if type(configured) == "string" and zombieConfig.Difficulties and zombieConfig.Difficulties[configured] then
+		return configured
+	end
+	return zombieConfig.DefaultDifficulty or "Medium"
+end
+
+local function getDifficultyConfig()
+	local key = getDifficultyKey()
+	local config = zombieConfig.Difficulties and zombieConfig.Difficulties[key]
+	return config or {
+		EnemyHealthMultiplier = 1,
+		EnemyDamageMultiplier = 1,
+		EnemyCountMultiplier = 1,
+		RewardMultiplier = 1,
+		CrystalMultiplier = 1,
+	}
+end
+
+local function getRewardBonusMultiplier(playerCount)
+	if playerCount <= 1 then
+		return 1
+	end
+
+	local perPlayer = tonumber(zombieConfig.PartyRewardBonusPerPlayer) or 0.1
+	return 1 + perPlayer * playerCount
+end
+
+local function getEnemyCountPartyMultiplier(playerCount)
+	if playerCount <= 1 then
+		return 1
+	end
+
+	local perPlayer = tonumber(zombieConfig.PartyEnemyCountBonusPerPlayer) or 0.1
+	return 1 + perPlayer * playerCount
+end
+
+local function getFreeRespawnSecondsForDeath(deathCount)
+	local base = tonumber(zombieConfig.FreeRespawnBaseSeconds) or 10
+	local increment = tonumber(zombieConfig.FreeRespawnIncrementSeconds) or 10
+	return base + math.max(0, deathCount - 1) * increment
+end
+
+local function awardZombieKillToParty(rewardMoney, rewardXP)
+	local players = Players:GetPlayers()
+	local count = #players
+	if count <= 0 then
 		return
 	end
 
-	local money = ensureIntStat(leaderstats, "Money", 0)
-	money.Value += math.max(0, math.floor(rewardMoney or 0))
-	addXp(player, rewardXP or 0)
+	local bonus = getRewardBonusMultiplier(count)
+	local moneyPerPlayer = math.max(0, math.floor((rewardMoney or 0) * bonus / count + 0.5))
+	local xpPerPlayer = math.max(0, math.floor((rewardXP or 0) * bonus / count + 0.5))
+
+	for _, player in ipairs(players) do
+		addMoney(player, moneyPerPlayer)
+		addXp(player, xpPerPlayer)
+	end
+end
+
+local function awardBossCrystalsToParty(baseCrystals)
+	local difficulty = getDifficultyConfig()
+	local multiplier = tonumber(difficulty.CrystalMultiplier) or 1
+	local perPlayer = math.max(1, math.floor((baseCrystals or 0) * multiplier + 0.5))
+
+	for _, player in ipairs(Players:GetPlayers()) do
+		addCrystals(player, perPlayer)
+	end
 end
 
 local function colorFromRgbArray(rgbArray, fallback)
@@ -191,7 +297,9 @@ local function getPlayerState(player)
 
 	state = {
 		alive = false,
+		downed = false,
 		deathToken = 0,
+		deathCount = 0,
 		downedMarker = nil,
 	}
 	playerStates[player] = state
@@ -262,7 +370,7 @@ end
 
 local function getLiveTargetFromPlayer(player)
 	local state = playerStates[player]
-	if not state or not state.alive then
+	if not state or not state.alive or state.downed then
 		return nil, nil
 	end
 
@@ -322,6 +430,17 @@ end
 
 local function getDifficultyStage()
 	return math.max(0, math.floor(getSurvivalSeconds() / math.max(1, zombieConfig.DifficultyStepSeconds)))
+end
+
+local function getDifficultyMultipliers()
+	local difficulty = getDifficultyConfig()
+	return {
+		health = tonumber(difficulty.EnemyHealthMultiplier) or 1,
+		damage = tonumber(difficulty.EnemyDamageMultiplier) or 1,
+		enemyCount = tonumber(difficulty.EnemyCountMultiplier) or 1,
+		reward = tonumber(difficulty.RewardMultiplier) or 1,
+		crystal = tonumber(difficulty.CrystalMultiplier) or 1,
+	}
 end
 
 local function getCurrentVariantWeights()
@@ -591,11 +710,12 @@ local function createZombie(position, variantKey, stage)
 	zombie:SetAttribute("IsZombie", true)
 	zombie:SetAttribute("ZombieVariant", variantKey)
 
-	local health = getScaledValue(zombieConfig.BaseHealth, zombieConfig.HealthScalePerStage, stage, variant.HealthMul or 1)
+	local multipliers = getDifficultyMultipliers()
+	local health = getScaledValue(zombieConfig.BaseHealth, zombieConfig.HealthScalePerStage, stage, (variant.HealthMul or 1) * multipliers.health)
 	local moveSpeed = getScaledValue(zombieConfig.BaseMoveSpeed, zombieConfig.SpeedScalePerStage, stage, variant.MoveSpeedMul or 1)
-	local attackDamage = getScaledValue(zombieConfig.BaseAttackDamage, zombieConfig.DamageScalePerStage, stage, variant.DamageMul or 1)
-	local rewardMoney = getScaledValue(zombieConfig.BaseRewardMoney, zombieConfig.RewardScalePerStage, stage, variant.RewardMul or 1)
-	local rewardXP = getScaledValue(zombieConfig.BaseRewardXP, zombieConfig.RewardScalePerStage, stage, variant.RewardMul or 1)
+	local attackDamage = getScaledValue(zombieConfig.BaseAttackDamage, zombieConfig.DamageScalePerStage, stage, (variant.DamageMul or 1) * multipliers.damage)
+	local rewardMoney = getScaledValue(zombieConfig.BaseRewardMoney, zombieConfig.RewardScalePerStage, stage, (variant.RewardMul or 1) * multipliers.reward)
+	local rewardXP = getScaledValue(zombieConfig.BaseRewardXP, zombieConfig.RewardScalePerStage, stage, (variant.RewardMul or 1) * multipliers.reward)
 	local attackRange = zombieConfig.BaseAttackRange
 	local attackCooldown = math.max(0.35, zombieConfig.BaseAttackCooldown / (1 + stage * 0.02))
 
@@ -709,6 +829,7 @@ local function createZombie(position, variantKey, stage)
 		attackCooldown = attackCooldown,
 		rewardMoney = rewardMoney,
 		rewardXP = rewardXP,
+		bossCrystals = math.max(0, math.floor((variant.BossCrystalDrop or 0) * multipliers.crystal + 0.5)),
 		lastAttack = 0,
 		lastSpit = 0,
 		dead = false,
@@ -717,11 +838,11 @@ local function createZombie(position, variantKey, stage)
 		isSpitter = variantKey == "Spitter",
 		isBomber = variantKey == "Bomber",
 		spitRange = variant.SpitRange or 0,
-		spitDamage = (variant.SpitDamage or 0) * (1 + stage * zombieConfig.DamageScalePerStage),
+		spitDamage = (variant.SpitDamage or 0) * (1 + stage * zombieConfig.DamageScalePerStage) * multipliers.damage,
 		spitCooldown = variant.SpitCooldown or 0,
 		spitProjectileSpeed = variant.SpitProjectileSpeed or 0,
 		explosionRange = variant.ExplosionRange or 0,
-		explosionDamage = (variant.ExplosionDamage or 0) * (1 + stage * zombieConfig.DamageScalePerStage),
+		explosionDamage = (variant.ExplosionDamage or 0) * (1 + stage * zombieConfig.DamageScalePerStage) * multipliers.damage,
 		explosionTriggerRange = variant.ExplosionTriggerRange or 0,
 		flyHeight = variant.FlyHeight or 0,
 	}
@@ -736,9 +857,11 @@ local function createZombie(position, variantKey, stage)
 		state.dead = true
 		humanoid.Health = 0
 
-		local killer = resolveKillerPlayer(humanoid)
-		if killer then
-			awardZombieKill(killer, state.rewardMoney, state.rewardXP)
+		if not matchState.ended then
+			awardZombieKillToParty(state.rewardMoney, state.rewardXP)
+			if state.bossCrystals > 0 then
+				awardBossCrystalsToParty(state.bossCrystals)
+			end
 		end
 
 		zombieStates[zombie] = nil
@@ -842,20 +965,30 @@ local function startNewMatch()
 	matchState.runId += 1
 	matchState.startedAt = os.clock()
 	matchState.ended = false
+	wipeState.active = false
+	wipeState.endsAt = 0
+	wipeState.token += 1
+
+	local difficultyKey = getDifficultyKey()
 
 	Workspace:SetAttribute("SurvivalState", "Running")
 	Workspace:SetAttribute("SurvivalReason", "")
+	Workspace:SetAttribute("SelectedDifficulty", difficultyKey)
+	Workspace:SetAttribute("Difficulty", difficultyKey)
 	broadcastSurvivalEvent({
 		type = "match",
-		text = "New run started. Survive as long as possible.",
+		text = ("New run started. Difficulty: %s"):format(difficultyKey),
 	})
 
 	clearAllZombies()
 	clearAllDownedMarkers()
+	clearReviveOptions()
 
 	for _, player in ipairs(Players:GetPlayers()) do
 		local state = getPlayerState(player)
 		state.alive = false
+		state.downed = false
+		state.deathCount = 0
 		state.deathToken += 1
 		safeLoadCharacter(player)
 	end
@@ -867,11 +1000,14 @@ local function endMatch(reason)
 	end
 
 	matchState.ended = true
+	wipeState.active = false
+	wipeState.endsAt = 0
+	wipeState.token += 1
 	Workspace:SetAttribute("SurvivalState", "GameOver")
 	Workspace:SetAttribute("SurvivalReason", reason or "All players down")
 	broadcastSurvivalEvent({
 		type = "match",
-		text = ("Game over. Restart in %ds."):format(zombieConfig.RestartDelayAfterWipe),
+		text = ("Game over. Returning in %ds."):format(zombieConfig.RestartDelayAfterWipe),
 	})
 
 	clearAllZombies()
@@ -879,15 +1015,91 @@ local function endMatch(reason)
 
 	for _, state in pairs(playerStates) do
 		state.alive = false
+		state.downed = false
 		state.deathToken += 1
 	end
+	table.clear(pendingProductRequests)
 
 	local currentRunId = matchState.runId
 	task.delay(zombieConfig.RestartDelayAfterWipe, function()
 		if matchState.runId ~= currentRunId then
 			return
 		end
+
+		local lobbyPlaceId = tonumber(zombieConfig.LobbyPlaceId) or 0
+		if lobbyPlaceId > 0 and not RunService:IsStudio() then
+			local players = Players:GetPlayers()
+			if #players > 0 then
+				local ok, err = pcall(function()
+					TeleportService:TeleportAsync(lobbyPlaceId, players)
+				end)
+				if ok then
+					return
+				end
+				warn("[Survival] Teleport to lobby failed:", err)
+			end
+		end
+
 		startNewMatch()
+	end)
+end
+
+clearReviveOptions = function()
+	broadcastSurvivalEvent({
+		type = "revive_options_clear",
+	})
+end
+
+local function canUseWipeWindow()
+	return wipeState.active and os.clock() <= wipeState.endsAt
+end
+
+local function beginWipeWindow()
+	if wipeState.active or matchState.ended then
+		return
+	end
+
+	wipeState.active = true
+	wipeState.token += 1
+	local wipeToken = wipeState.token
+	local duration = tonumber(zombieConfig.WipePurchaseWindowSeconds) or 30
+	wipeState.endsAt = os.clock() + duration
+
+	broadcastSurvivalEvent({
+		type = "match",
+		text = ("All players are down. Buy revive in %ds or run ends."):format(duration),
+	})
+	broadcastSurvivalEvent({
+		type = "revive_options",
+		canSolo = true,
+		canTeam = true,
+		soloPrice = soloReviveRobux,
+		teamPrice = teamReviveRobux,
+		seconds = duration,
+		wipeOnly = true,
+	})
+
+	task.spawn(function()
+		for secondsLeft = duration, 1, -1 do
+			if matchState.ended or wipeState.token ~= wipeToken or not wipeState.active then
+				return
+			end
+
+			broadcastSurvivalEvent({
+				type = "wipe_timer",
+				seconds = secondsLeft,
+				text = ("Team wipe. Buy revive in %ds."):format(secondsLeft),
+			})
+			task.wait(1)
+		end
+
+		if matchState.ended or wipeState.token ~= wipeToken or not wipeState.active then
+			return
+		end
+
+		if countAlivePlayers() <= 0 then
+			endMatch("All players died")
+		end
 	end)
 end
 
@@ -899,14 +1111,124 @@ local function revivePlayer(player, reasonText)
 	local state = getPlayerState(player)
 	state.deathToken += 1
 	state.alive = false
+	state.downed = false
 	removeDownedMarker(player)
 
 	sendSurvivalEventToPlayer(player, {
 		type = "respawn_clear",
 		text = reasonText or "Respawning...",
 	})
+	sendSurvivalEventToPlayer(player, {
+		type = "revive_options_clear",
+	})
 
 	safeLoadCharacter(player)
+
+	if wipeState.active and countAlivePlayers() > 0 then
+		wipeState.active = false
+		wipeState.endsAt = 0
+		wipeState.token += 1
+		clearReviveOptions()
+	end
+end
+
+local function canRequestSoloRevive(player)
+	if matchState.ended then
+		return false
+	end
+
+	local state = getPlayerState(player)
+	if not state.downed then
+		return false
+	end
+
+	if wipeState.active then
+		return canUseWipeWindow()
+	end
+
+	return true
+end
+
+local function canRequestTeamRevive(player)
+	if matchState.ended then
+		return false
+	end
+
+	local state = getPlayerState(player)
+	if not state.downed then
+		return false
+	end
+
+	return canUseWipeWindow()
+end
+
+local function grantTeamRevive(player)
+	if not canRequestTeamRevive(player) then
+		return false
+	end
+
+	local revivedCount = 0
+	for _, target in ipairs(Players:GetPlayers()) do
+		local targetState = getPlayerState(target)
+		if targetState.downed then
+			revivePlayer(target, "Team revive purchased")
+			revivedCount += 1
+		end
+	end
+
+	if revivedCount > 0 then
+		broadcastSurvivalEvent({
+			type = "match",
+			text = ("%s used team revive. Revived %d players."):format(player.Name, revivedCount),
+		})
+	end
+	return revivedCount > 0
+end
+
+local function grantSoloRevive(player)
+	if not canRequestSoloRevive(player) then
+		return false
+	end
+
+	revivePlayer(player, "Solo revive purchased")
+	broadcastSurvivalEvent({
+		type = "match",
+		text = ("%s used solo revive."):format(player.Name),
+	})
+	return true
+end
+
+local function promptRevivePurchase(player, kind)
+	local productId = kind == "team" and teamReviveProductId or soloReviveProductId
+
+	if RunService:IsStudio() and productId <= 0 then
+		if kind == "team" then
+			grantTeamRevive(player)
+		else
+			grantSoloRevive(player)
+		end
+		return
+	end
+
+	if productId <= 0 then
+		sendSurvivalEventToPlayer(player, {
+			type = "match",
+			text = "Revive product is not configured.",
+		})
+		return
+	end
+
+	pendingProductRequests[player.UserId] = {
+		kind = kind,
+		runId = matchState.runId,
+	}
+
+	local ok, err = pcall(function()
+		MarketplaceService:PromptProductPurchase(player, productId)
+	end)
+	if not ok then
+		warn("[Survival] PromptProductPurchase failed:", err)
+	end
 end
 
 local function createDownedMarker(player, deathToken, position)
@@ -936,12 +1258,12 @@ local function createDownedMarker(player, deathToken, position)
 	state.downedMarker = marker
 
 	prompt.Triggered:Connect(function(reviver)
-		if reviver == player or matchState.ended then
+		if reviver == player or matchState.ended or wipeState.active then
 			return
 		end
 
 		local currentState = getPlayerState(player)
-		if currentState.deathToken ~= deathToken then
+		if currentState.deathToken ~= deathToken or not currentState.downed then
 			return
 		end
 
@@ -973,6 +1295,8 @@ local function handlePlayerDeath(player, character)
 	end
 
 	state.alive = false
+	state.downed = true
+	state.deathCount += 1
 	state.deathToken += 1
 	local deathToken = state.deathToken
 	local runId = matchState.runId
@@ -988,61 +1312,88 @@ local function handlePlayerDeath(player, character)
 	createDownedMarker(player, deathToken, deathPosition)
 
 	if countAlivePlayers() <= 0 then
-		endMatch("All players died")
+		beginWipeWindow()
 		return
 	end
 
+	local freeRespawnSeconds = getFreeRespawnSecondsForDeath(state.deathCount)
 	sendSurvivalEventToPlayer(player, {
 		type = "respawn",
-		seconds = zombieConfig.RespawnDelayIfTeammateAlive,
-		text = "You are down. Teammates can revive you.",
+		seconds = freeRespawnSeconds,
+		mode = "free",
+		text = ("You are down. Free respawn in %ds."):format(freeRespawnSeconds),
+	})
+	sendSurvivalEventToPlayer(player, {
+		type = "revive_options",
+		canSolo = true,
+		canTeam = false,
+		soloPrice = soloReviveRobux,
+		teamPrice = teamReviveRobux,
+		seconds = freeRespawnSeconds,
+		wipeOnly = false,
 	})
 
 	task.spawn(function()
-		for secondsLeft = zombieConfig.RespawnDelayIfTeammateAlive, 1, -1 do
+		for secondsLeft = freeRespawnSeconds, 1, -1 do
 			if matchState.runId ~= runId or matchState.ended then
 				return
 			end
 
 			local currentState = getPlayerState(player)
-			if currentState.deathToken ~= deathToken then
+			if currentState.deathToken ~= deathToken or not currentState.downed then
+				return
+			end
+
+			if wipeState.active then
 				return
 			end
 
 			sendSurvivalEventToPlayer(player, {
 				type = "respawn",
 				seconds = secondsLeft,
+				mode = "free",
 			})
 			task.wait(1)
 		end
 	end)
 
-	task.delay(zombieConfig.RespawnDelayIfTeammateAlive, function()
+	task.delay(freeRespawnSeconds, function()
 		if matchState.runId ~= runId or matchState.ended then
 			return
 		end
 
 		local currentState = getPlayerState(player)
-		if currentState.deathToken ~= deathToken then
+		if currentState.deathToken ~= deathToken or not currentState.downed then
 			return
 		end
 
-		if countAlivePlayers() <= 0 then
+		if wipeState.active then
 			return
 		end
 
-		revivePlayer(player, "Auto-respawned at start")
+		revivePlayer(player, "Free respawn")
 	end)
 end
 local function onCharacterAdded(player, character)
 	local state = getPlayerState(player)
 	state.alive = true
+	state.downed = false
 	state.deathToken += 1
 	removeDownedMarker(player)
+
+	if wipeState.active and countAlivePlayers() > 0 then
+		wipeState.active = false
+		wipeState.endsAt = 0
+		wipeState.token += 1
+		clearReviveOptions()
+	end
 
 	sendSurvivalEventToPlayer(player, {
 		type = "respawn_clear",
 		text = "",
+	})
+	sendSurvivalEventToPlayer(player, {
+		type = "revive_options_clear",
 	})
 
 	task.defer(function()
@@ -1060,7 +1411,10 @@ end
 local function setupPlayer(player)
 	local state = getPlayerState(player)
 	state.alive = false
+	state.downed = false
 	state.deathToken += 1
+	ensureLeaderstats(player)
+	ensureProgression(player)
 
 	player.CharacterAdded:Connect(function(character)
 		onCharacterAdded(player, character)
@@ -1080,14 +1434,15 @@ end
 local function cleanupPlayer(player)
 	removeDownedMarker(player)
 	playerStates[player] = nil
+	pendingProductRequests[player.UserId] = nil
 
 	if not matchState.ended and #Players:GetPlayers() > 0 and countAlivePlayers() <= 0 then
-		endMatch("No alive players")
+		beginWipeWindow()
 	end
 end
 
 local function spawnZombieFromPoint()
-	if matchState.ended then
+	if matchState.ended or wipeState.active then
 		return
 	end
 
@@ -1096,7 +1451,12 @@ local function spawnZombieFromPoint()
 	end
 
 	local stage = getDifficultyStage()
+	local multipliers = getDifficultyMultipliers()
+	local partySize = #Players:GetPlayers()
 	local maxAlive = math.max(2, zombieConfig.BaseMaxAlive + stage * zombieConfig.MaxAlivePerStage)
+	maxAlive *= getEnemyCountPartyMultiplier(partySize)
+	maxAlive *= multipliers.enemyCount
+	maxAlive = math.max(2, math.floor(maxAlive + 0.5))
 	if countAliveZombies() >= maxAlive then
 		return
 	end
@@ -1108,6 +1468,55 @@ local function spawnZombieFromPoint()
 
 	local variantKey = chooseVariantKey()
 	createZombie(point.Position, variantKey, stage)
+end
+
+revivePurchaseEvent.OnServerEvent:Connect(function(player, action)
+	if action == "request_solo" then
+		if canRequestSoloRevive(player) then
+			promptRevivePurchase(player, "solo")
+		end
+		return
+	end
+
+	if action == "request_team" then
+		if canRequestTeamRevive(player) then
+			promptRevivePurchase(player, "team")
+		end
+	end
+end)
+
+MarketplaceService.ProcessReceipt = function(receiptInfo)
+	local purchaseId = tostring(receiptInfo.PurchaseId)
+	if processedReceipts[purchaseId] then
+		return Enum.ProductPurchaseDecision.PurchaseGranted
+	end
+
+	local player = Players:GetPlayerByUserId(receiptInfo.PlayerId)
+	if not player then
+		return Enum.ProductPurchaseDecision.NotProcessedYet
+	end
+
+	local kind = nil
+	local pending = pendingProductRequests[receiptInfo.PlayerId]
+	if pending and pending.runId == matchState.runId then
+		kind = pending.kind
+	else
+		if receiptInfo.ProductId == soloReviveProductId then
+			kind = "solo"
+		elseif receiptInfo.ProductId == teamReviveProductId then
+			kind = "team"
+		end
+	end
+
+	if kind == "team" then
+		grantTeamRevive(player)
+	elseif kind == "solo" then
+		grantSoloRevive(player)
+	end
+
+	pendingProductRequests[receiptInfo.PlayerId] = nil
+	processedReceipts[purchaseId] = true
+	return Enum.ProductPurchaseDecision.PurchaseGranted
 end
 
 ensureDefaultSpawnPoints()
@@ -1140,7 +1549,11 @@ end
 task.spawn(function()
 	while true do
 		local stage = getDifficultyStage()
+		local multipliers = getDifficultyMultipliers()
+		local partyMultiplier = getEnemyCountPartyMultiplier(#Players:GetPlayers())
+		local spawnPressure = math.max(1, multipliers.enemyCount * partyMultiplier)
 		local interval = zombieConfig.BaseSpawnInterval / (1 + stage * zombieConfig.SpawnRateScalePerStage)
+		interval /= spawnPressure
 		interval = math.max(zombieConfig.MinSpawnInterval, interval)
 		task.wait(interval)
 		spawnZombieFromPoint()

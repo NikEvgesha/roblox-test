@@ -31,6 +31,7 @@ local function ensureLeaderstats(player)
 	ensureIntStat(leaderstats, "Money", 0)
 	ensureIntStat(leaderstats, "XP", 0)
 	ensureIntStat(leaderstats, "Level", 1)
+	ensureIntStat(leaderstats, "Crystals", 0)
 end
 
 local function ensureProgression(player)

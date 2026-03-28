@@ -30,6 +30,45 @@ return {
 	},
 
 	Zombies = {
+		LobbyPlaceId = 0,
+		DefaultDifficulty = "Medium",
+		Difficulties = {
+			Easy = {
+				DisplayName = "Easy",
+				EnemyHealthMultiplier = 0.5,
+				EnemyDamageMultiplier = 0.5,
+				EnemyCountMultiplier = 0.5,
+				RewardMultiplier = 0.5,
+				CrystalMultiplier = 0.5,
+			},
+			Medium = {
+				DisplayName = "Medium",
+				EnemyHealthMultiplier = 1.0,
+				EnemyDamageMultiplier = 1.0,
+				EnemyCountMultiplier = 1.0,
+				RewardMultiplier = 1.0,
+				CrystalMultiplier = 1.0,
+			},
+			Hard = {
+				DisplayName = "Hard",
+				EnemyHealthMultiplier = 2.0,
+				EnemyDamageMultiplier = 2.0,
+				EnemyCountMultiplier = 2.0,
+				RewardMultiplier = 2.0,
+				CrystalMultiplier = 2.0,
+			},
+			Insane = {
+				DisplayName = "Insane",
+				EnemyHealthMultiplier = 4.0,
+				EnemyDamageMultiplier = 4.0,
+				EnemyCountMultiplier = 4.0,
+				RewardMultiplier = 4.0,
+				CrystalMultiplier = 4.0,
+			},
+		},
+		PartyRewardBonusPerPlayer = 0.1,
+		PartyEnemyCountBonusPerPlayer = 0.1,
+
 		BaseMaxAlive = 10,
 		BaseSpawnInterval = 3.8,
 		MinSpawnInterval = 1.1,
@@ -51,6 +90,17 @@ return {
 		SpawnRateScalePerStage = 0.12,
 
 		RespawnDelayIfTeammateAlive = 60,
+		FreeRespawnBaseSeconds = 10,
+		FreeRespawnIncrementSeconds = 10,
+		WipePurchaseWindowSeconds = 30,
+		ReviveProducts = {
+			SoloReviveProductId = 0,
+			TeamReviveProductId = 0,
+		},
+		ReviveDisplayPrices = {
+			SoloReviveRobux = 10,
+			TeamReviveRobux = 50,
+		},
 		RestartDelayAfterWipe = 12,
 
 		KillCreditTimeout = 15,
@@ -114,6 +164,7 @@ return {
 				MoveSpeedMul = 1.1,
 				DamageMul = 0.8,
 				RewardMul = 1.8,
+				BossCrystalDrop = 1,
 				ExplosionRange = 10,
 				ExplosionDamage = 45,
 				ExplosionTriggerRange = 6.5,
