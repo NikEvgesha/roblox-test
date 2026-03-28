@@ -13,6 +13,8 @@ local SHOP_EVENT_NAME = "ShopEvent"
 local KILL_TAG_LIFETIME = 8
 
 local weaponsByKey = combatConfig.Weapons
+local metaProgressionConfig = combatConfig.MetaProgression or {}
+local metaUpgradeConfig = metaProgressionConfig.Upgrades or {}
 local toolNameToWeaponKey = {}
 for weaponKey, definition in pairs(weaponsByKey) do
 	toolNameToWeaponKey[definition.ToolName] = weaponKey
@@ -57,18 +59,38 @@ local function getProgressionLevel(player, statName)
 	return math.max(0, stat.Value)
 end
 
+local function getMetaUpgradeLevel(player, upgradeKey)
+	local metaProgression = player:FindFirstChild("MetaProgression")
+	if not metaProgression then
+		return 0
+	end
+
+	local stat = metaProgression:FindFirstChild(upgradeKey)
+	if not stat or not stat:IsA("IntValue") then
+		return 0
+	end
+
+	return math.max(0, stat.Value)
+end
+
 local function getRangedDamageMultiplier(player)
 	local skill = combatConfig.Progression.Skills and combatConfig.Progression.Skills.RangedDamage or nil
 	local perLevel = skill and skill.DamageMultiplierPerLevel or 0
-	local level = getProgressionLevel(player, "RangedLevel")
-	return 1 + level * perLevel
+	local runLevel = getProgressionLevel(player, "RangedLevel")
+	local metaDamage = metaUpgradeConfig.Damage or {}
+	local metaLevel = getMetaUpgradeLevel(player, "Damage")
+	local metaBonus = metaLevel * (tonumber(metaDamage.RangedDamagePerLevel) or 0)
+	return 1 + runLevel * perLevel + metaBonus
 end
 
 local function getMeleeDamageMultiplier(player)
 	local skill = combatConfig.Progression.Skills and combatConfig.Progression.Skills.MeleeDamage or nil
 	local perLevel = skill and skill.DamageMultiplierPerLevel or 0
-	local level = getProgressionLevel(player, "MeleeLevel")
-	return 1 + level * perLevel
+	local runLevel = getProgressionLevel(player, "MeleeLevel")
+	local metaDamage = metaUpgradeConfig.Damage or {}
+	local metaLevel = getMetaUpgradeLevel(player, "Damage")
+	local metaBonus = metaLevel * (tonumber(metaDamage.MeleeDamagePerLevel) or 0)
+	return 1 + runLevel * perLevel + metaBonus
 end
 
 local function ensureStat(parent, name, className, defaultValue)

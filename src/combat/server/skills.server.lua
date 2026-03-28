@@ -7,6 +7,8 @@ local combatConfig = require(sharedFolder:WaitForChild("CombatConfig"))
 local SKILL_EVENT_NAME = "SkillEvent"
 local progressionConfig = combatConfig.Progression
 local skillsConfig = progressionConfig.Skills
+local metaProgressionConfig = combatConfig.MetaProgression or {}
+local metaUpgradeConfig = metaProgressionConfig.Upgrades or {}
 
 local skillToStatName = {
 	Speed = "SpeedLevel",
@@ -83,6 +85,20 @@ local function setSkillLevel(progression, skillKey, level)
 	value.Value = level
 end
 
+local function getMetaUpgradeLevel(player, upgradeKey)
+	local metaProgression = player:FindFirstChild("MetaProgression")
+	if not metaProgression then
+		return 0
+	end
+
+	local value = metaProgression:FindFirstChild(upgradeKey)
+	if not value or not value:IsA("IntValue") then
+		return 0
+	end
+
+	return math.max(0, value.Value)
+end
+
 local function applyCharacterDerivedStats(player, character)
 	local progression = ensureProgression(player)
 	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
@@ -92,9 +108,16 @@ local function applyCharacterDerivedStats(player, character)
 
 	local speedLevel = getSkillLevel(progression, "Speed")
 	local healthLevel = getSkillLevel(progression, "Health")
+	local metaSpeedLevel = getMetaUpgradeLevel(player, "Speed")
+	local metaHealthLevel = getMetaUpgradeLevel(player, "Health")
 
-	local walkSpeed = progressionConfig.BaseWalkSpeed + speedLevel * (skillsConfig.Speed.WalkSpeedPerLevel or 0)
-	local maxHealth = progressionConfig.BaseMaxHealth + healthLevel * (skillsConfig.Health.MaxHealthPerLevel or 0)
+	local walkSpeed = progressionConfig.BaseWalkSpeed
+	walkSpeed += speedLevel * (skillsConfig.Speed.WalkSpeedPerLevel or 0)
+	walkSpeed += metaSpeedLevel * (tonumber((metaUpgradeConfig.Speed or {}).WalkSpeedPerLevel) or 0)
+
+	local maxHealth = progressionConfig.BaseMaxHealth
+	maxHealth += healthLevel * (skillsConfig.Health.MaxHealthPerLevel or 0)
+	maxHealth += metaHealthLevel * (tonumber((metaUpgradeConfig.Health or {}).MaxHealthPerLevel) or 0)
 	local oldMax = math.max(1, humanoid.MaxHealth)
 	local oldRatio = math.clamp(humanoid.Health / oldMax, 0, 1)
 
@@ -163,6 +186,22 @@ end
 local function setupPlayer(player)
 	ensureProgression(player)
 
+	local function bindMetaSignals()
+		local metaProgression = player:FindFirstChild("MetaProgression")
+		if not metaProgression then
+			return
+		end
+
+		for _, upgradeKey in ipairs({ "Speed", "Health" }) do
+			local value = metaProgression:FindFirstChild(upgradeKey)
+			if value and value:IsA("IntValue") then
+				value:GetPropertyChangedSignal("Value"):Connect(function()
+					applyCharacterDerivedStats(player, player.Character)
+				end)
+			end
+		end
+	end
+
 	player.CharacterAdded:Connect(function(character)
 		task.defer(function()
 			applyCharacterDerivedStats(player, character)
@@ -174,6 +213,8 @@ local function setupPlayer(player)
 			applyCharacterDerivedStats(player, player.Character)
 		end)
 	end
+
+	task.defer(bindMetaSignals)
 end
 
 for _, player in ipairs(Players:GetPlayers()) do

@@ -37,6 +37,36 @@ return {
 		QueueTouchDebounceSeconds = 1.0,
 	},
 
+	MetaProgression = {
+		DataStoreName = "HeroicSurvivalProfile_v1",
+		AutoSaveIntervalSeconds = 90,
+		UpgradeOrder = { "Damage", "Health", "Speed" },
+		Upgrades = {
+			Damage = {
+				DisplayName = "Damage",
+				MaxLevel = 20,
+				BaseCost = 5,
+				CostStep = 5,
+				RangedDamagePerLevel = 0.02,
+				MeleeDamagePerLevel = 0.02,
+			},
+			Health = {
+				DisplayName = "Health",
+				MaxLevel = 20,
+				BaseCost = 5,
+				CostStep = 5,
+				MaxHealthPerLevel = 4,
+			},
+			Speed = {
+				DisplayName = "Speed",
+				MaxLevel = 20,
+				BaseCost = 5,
+				CostStep = 5,
+				WalkSpeedPerLevel = 0.12,
+			},
+		},
+	},
+
 	Zombies = {
 		LobbyPlaceId = 135533599453315,
 		DefaultDifficulty = "Medium",
