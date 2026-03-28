@@ -507,6 +507,7 @@ local spectatorIsDowned = false
 local spectatorPosition = Vector3.new(0, 10, 0)
 local spectatorYaw = 0
 local spectatorPitch = 0
+local spectatorLookActive = false
 local spectatorInput = {
 	forward = false,
 	back = false,
@@ -559,6 +560,25 @@ local function clearSpectatorInput()
 	end
 end
 
+local function setSpectatorLookActive(enabled)
+	if spectatorLookActive == enabled then
+		return
+	end
+
+	spectatorLookActive = enabled
+	if not spectatorModeEnabled then
+		return
+	end
+
+	if spectatorLookActive then
+		UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
+		UserInputService.MouseIconEnabled = false
+	else
+		UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+		UserInputService.MouseIconEnabled = true
+	end
+end
+
 local function setSpectatorMode(enabled)
 	if spectatorModeEnabled == enabled then
 		return
@@ -570,6 +590,7 @@ local function setSpectatorMode(enabled)
 	if enabled then
 		setAimModeEnabled(false)
 		clearSpectatorInput()
+		spectatorLookActive = false
 
 		if camera then
 			local cframe = camera.CFrame
@@ -581,12 +602,13 @@ local function setSpectatorMode(enabled)
 			camera.CFrame = cframe
 		end
 
-		UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
-		UserInputService.MouseIconEnabled = false
+		UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+		UserInputService.MouseIconEnabled = true
 		return
 	end
 
 	clearSpectatorInput()
+	spectatorLookActive = false
 	if camera then
 		camera.CameraType = Enum.CameraType.Custom
 	end
@@ -681,13 +703,15 @@ local function updateSpectatorCamera(deltaTime)
 		return
 	end
 
-	local mouseDelta = UserInputService:GetMouseDelta()
-	spectatorYaw -= mouseDelta.X * SPECTATOR_MOUSE_SENSITIVITY
-	spectatorPitch = math.clamp(
-		spectatorPitch - mouseDelta.Y * SPECTATOR_MOUSE_SENSITIVITY,
-		-SPECTATOR_MAX_PITCH,
-		SPECTATOR_MAX_PITCH
-	)
+	if spectatorLookActive then
+		local mouseDelta = UserInputService:GetMouseDelta()
+		spectatorYaw -= mouseDelta.X * SPECTATOR_MOUSE_SENSITIVITY
+		spectatorPitch = math.clamp(
+			spectatorPitch - mouseDelta.Y * SPECTATOR_MOUSE_SENSITIVITY,
+			-SPECTATOR_MAX_PITCH,
+			SPECTATOR_MAX_PITCH
+		)
+	end
 
 	local horizontalForward = Vector3.new(-math.sin(spectatorYaw), 0, -math.cos(spectatorYaw))
 	local right = Vector3.new(math.cos(spectatorYaw), 0, -math.sin(spectatorYaw))
@@ -1278,11 +1302,16 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 		return
 	end
 
-	if spectatorModeEnabled and handleSpectatorInputBegan(input) then
-		return
-	end
-
 	if spectatorModeEnabled then
+		if input.UserInputType == Enum.UserInputType.MouseButton2 then
+			setSpectatorLookActive(true)
+			return
+		end
+
+		if handleSpectatorInputBegan(input) then
+			return
+		end
+
 		return
 	end
 
@@ -1323,7 +1352,16 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 end)
 
 UserInputService.InputEnded:Connect(function(input)
-	if spectatorModeEnabled and handleSpectatorInputEnded(input) then
+	if spectatorModeEnabled then
+		if input.UserInputType == Enum.UserInputType.MouseButton2 then
+			setSpectatorLookActive(false)
+			return
+		end
+
+		if handleSpectatorInputEnded(input) then
+			return
+		end
+
 		return
 	end
 
@@ -1436,16 +1474,17 @@ survivalEvent.OnClientEvent:Connect(function(data)
 		local seconds = tonumber(data.seconds) or 0
 		respawnStatusLabel.Visible = true
 		if typeof(data.text) == "string" and data.text ~= "" then
-			respawnStatusLabel.Text = ("%s | Spectate: WASD + Space/Ctrl"):format(data.text)
+			respawnStatusLabel.Text = ("%s | Spectate: WASD + Space/Ctrl, hold RMB to look"):format(data.text)
 		else
-			respawnStatusLabel.Text = ("Downed. Auto-respawn in %ds | Spectate: WASD + Space/Ctrl")
+			respawnStatusLabel.Text = ("Downed. Auto-respawn in %ds | Spectate: WASD + Space/Ctrl, hold RMB to look")
 				:format(math.max(0, math.floor(seconds)))
 		end
 	elseif data.type == "wipe_timer" then
 		setDownedSpectatorState(true)
 		local seconds = math.max(0, math.floor(tonumber(data.seconds) or 0))
 		respawnStatusLabel.Visible = true
-		respawnStatusLabel.Text = ("Team wipe. Revive window: %ds | Spectate: WASD + Space/Ctrl"):format(seconds)
+		respawnStatusLabel.Text = ("Team wipe. Revive window: %ds | Spectate: WASD + Space/Ctrl, hold RMB to look")
+			:format(seconds)
 	elseif data.type == "revive_options" then
 		setDownedSpectatorState(true)
 		setAimModeEnabled(false)
@@ -1453,7 +1492,8 @@ survivalEvent.OnClientEvent:Connect(function(data)
 		if data.wipeOnly then
 			local seconds = math.max(0, math.floor(tonumber(data.seconds) or 0))
 			respawnStatusLabel.Visible = true
-			respawnStatusLabel.Text = ("Team wipe. Buy revive in %ds | Spectate: WASD + Space/Ctrl"):format(seconds)
+			respawnStatusLabel.Text = ("Team wipe. Buy revive in %ds | Spectate: WASD + Space/Ctrl, hold RMB to look")
+				:format(seconds)
 		end
 	elseif data.type == "revive_options_clear" then
 		hideReviveButtons()
