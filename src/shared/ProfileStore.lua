@@ -341,6 +341,7 @@ function ProfileStore.Save(player, force)
 			local merged = normalizeProfile(previous)
 			merged.version = snapshot.version
 			merged.crystals = snapshot.crystals
+			merged.selectedClass = snapshot.selectedClass
 			merged.upgrades = snapshot.upgrades
 			merged.updatedAt = snapshot.updatedAt
 			return merged
