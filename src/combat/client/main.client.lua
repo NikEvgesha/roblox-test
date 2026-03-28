@@ -4,8 +4,6 @@ local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
 
-local OPEN_DIALOG_EVENT_NAME = "OpenNpcDialog"
-local DIALOG_CHOICE_EVENT_NAME = "NpcDialogChoice"
 local COMBAT_ACTION_EVENT_NAME = "CombatAction"
 local COMBAT_STATE_EVENT_NAME = "CombatState"
 local SHOP_EVENT_NAME = "ShopEvent"
@@ -18,19 +16,12 @@ local playerGui = player:WaitForChild("PlayerGui")
 local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local combatConfig = require(sharedFolder:WaitForChild("CombatConfig"))
 
-local openDialogEvent = ReplicatedStorage:WaitForChild(OPEN_DIALOG_EVENT_NAME)
-local dialogChoiceEvent = ReplicatedStorage:WaitForChild(DIALOG_CHOICE_EVENT_NAME)
 local combatActionEvent = ReplicatedStorage:WaitForChild(COMBAT_ACTION_EVENT_NAME)
 local combatStateEvent = ReplicatedStorage:WaitForChild(COMBAT_STATE_EVENT_NAME)
 local shopEvent = ReplicatedStorage:WaitForChild(SHOP_EVENT_NAME)
 local skillEvent = ReplicatedStorage:WaitForChild(SKILL_EVENT_NAME)
 local survivalEvent = ReplicatedStorage:WaitForChild(SURVIVAL_EVENT_NAME)
 local revivePurchaseEvent = ReplicatedStorage:WaitForChild(REVIVE_PURCHASE_EVENT_NAME)
-
-local legacyGui = playerGui:FindFirstChild("NpcDialogGui")
-if legacyGui and legacyGui:IsA("ScreenGui") then
-	legacyGui.Enabled = false
-end
 
 local weaponByToolName = {}
 for weaponKey, definition in pairs(combatConfig.Weapons) do
@@ -328,60 +319,6 @@ crosshairVertical.BackgroundColor3 = Color3.fromRGB(245, 245, 245)
 crosshairVertical.BorderSizePixel = 0
 crosshairVertical.Parent = crosshairFrame
 
-local dialogFrame = Instance.new("Frame")
-dialogFrame.Name = "DialogFrame"
-dialogFrame.AnchorPoint = Vector2.new(0.5, 1)
-dialogFrame.Position = UDim2.new(0.5, 0, 1, -42)
-dialogFrame.Size = UDim2.fromOffset(560, 220)
-dialogFrame.BackgroundColor3 = Color3.fromRGB(21, 21, 21)
-dialogFrame.BackgroundTransparency = 0.1
-dialogFrame.Visible = false
-dialogFrame.Parent = gui
-
-local dialogCorner = Instance.new("UICorner")
-dialogCorner.CornerRadius = UDim.new(0, 12)
-dialogCorner.Parent = dialogFrame
-
-local npcNameLabel = Instance.new("TextLabel")
-npcNameLabel.Name = "NpcName"
-npcNameLabel.BackgroundTransparency = 1
-npcNameLabel.Position = UDim2.fromOffset(16, 12)
-npcNameLabel.Size = UDim2.new(1, -32, 0, 30)
-npcNameLabel.Font = Enum.Font.GothamBold
-npcNameLabel.TextSize = 24
-npcNameLabel.TextColor3 = Color3.fromRGB(245, 245, 245)
-npcNameLabel.TextXAlignment = Enum.TextXAlignment.Left
-npcNameLabel.Text = "NPC"
-npcNameLabel.Parent = dialogFrame
-
-local dialogTextLabel = Instance.new("TextLabel")
-dialogTextLabel.Name = "DialogText"
-dialogTextLabel.BackgroundTransparency = 1
-dialogTextLabel.Position = UDim2.fromOffset(16, 50)
-dialogTextLabel.Size = UDim2.new(1, -32, 0, 58)
-dialogTextLabel.Font = Enum.Font.Gotham
-dialogTextLabel.TextSize = 20
-dialogTextLabel.TextColor3 = Color3.fromRGB(228, 228, 228)
-dialogTextLabel.TextWrapped = true
-dialogTextLabel.TextXAlignment = Enum.TextXAlignment.Left
-dialogTextLabel.TextYAlignment = Enum.TextYAlignment.Top
-dialogTextLabel.Text = ""
-dialogTextLabel.Parent = dialogFrame
-
-local choicesFrame = Instance.new("Frame")
-choicesFrame.Name = "ChoicesFrame"
-choicesFrame.BackgroundTransparency = 1
-choicesFrame.Position = UDim2.fromOffset(16, 120)
-choicesFrame.Size = UDim2.new(1, -32, 1, -132)
-choicesFrame.Parent = dialogFrame
-
-local choicesLayout = Instance.new("UIListLayout")
-choicesLayout.FillDirection = Enum.FillDirection.Horizontal
-choicesLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
-choicesLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-choicesLayout.Padding = UDim.new(0, 8)
-choicesLayout.Parent = choicesFrame
-
 local shopFrame = Instance.new("Frame")
 shopFrame.Name = "ShopFrame"
 shopFrame.AnchorPoint = Vector2.new(1, 0)
@@ -562,7 +499,7 @@ local SHOP_AUTO_CLOSE_DISTANCE = 15
 local getCurrentWeapon
 
 local function hasBlockingUiOpen()
-	return dialogFrame.Visible or shopFrame.Visible or skillsFrame.Visible or reviveButtonsFrame.Visible
+	return shopFrame.Visible or skillsFrame.Visible or reviveButtonsFrame.Visible
 end
 
 local function updateCrosshairVisibility()
@@ -863,39 +800,6 @@ local function bindHumanoid(humanoid)
 	update()
 	humanoid.HealthChanged:Connect(update)
 	humanoid:GetPropertyChangedSignal("MaxHealth"):Connect(update)
-end
-
-local function clearDialogChoices()
-	for _, child in ipairs(choicesFrame:GetChildren()) do
-		if child:IsA("TextButton") then
-			child:Destroy()
-		end
-	end
-end
-
-local function addDialogChoiceButton(choiceData)
-	local button = Instance.new("TextButton")
-	local suffix = tostring(choiceData.id or "unknown"):gsub("[^%w_]", "_")
-	button.Name = "Choice_" .. suffix
-	button.Size = UDim2.fromOffset(170, 72)
-	button.AutoButtonColor = true
-	button.BackgroundColor3 = Color3.fromRGB(37, 37, 37)
-	button.TextColor3 = Color3.fromRGB(245, 245, 245)
-	button.Font = Enum.Font.GothamSemibold
-	button.TextSize = 18
-	button.TextWrapped = true
-	button.Text = choiceData.text or "..."
-	button.Parent = choicesFrame
-
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, 8)
-	corner.Parent = button
-
-	button.MouseButton1Click:Connect(function()
-		if choiceData.id then
-			dialogChoiceEvent:FireServer(choiceData.id)
-		end
-	end)
 end
 
 local function clearShopRows()
@@ -1235,29 +1139,6 @@ end)
 
 teamReviveButton.MouseButton1Click:Connect(function()
 	revivePurchaseEvent:FireServer("request_team")
-end)
-
-openDialogEvent.OnClientEvent:Connect(function(data)
-	if not data then
-		return
-	end
-
-	if data.mode == "close" then
-		dialogFrame.Visible = false
-		clearDialogChoices()
-		updateCrosshairVisibility()
-		return
-	end
-
-	setAimModeEnabled(false)
-	npcNameLabel.Text = data.npcName or "NPC"
-	dialogTextLabel.Text = data.text or "..."
-	dialogFrame.Visible = true
-
-	clearDialogChoices()
-	for _, choiceData in ipairs(data.choices or {}) do
-		addDialogChoiceButton(choiceData)
-	end
 end)
 
 combatStateEvent.OnClientEvent:Connect(function(data)
