@@ -2,25 +2,53 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Debris = game:GetService("Debris")
 local Workspace = game:GetService("Workspace")
+local ServerStorage = game:GetService("ServerStorage")
+local TweenService = game:GetService("TweenService")
 
 local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local combatConfig = require(sharedFolder:WaitForChild("CombatConfig"))
 
 local COMBAT_ACTION_EVENT_NAME = "CombatAction"
 local COMBAT_STATE_EVENT_NAME = "CombatState"
+local COMBAT_FEEDBACK_EVENT_NAME = "CombatFeedback"
 local SHOP_EVENT_NAME = "ShopEvent"
 
 local KILL_TAG_LIFETIME = 8
+local TRACER_SPEED = 980
+local TRACER_MIN_TRAVEL_TIME = 0.03
+local TRACER_MAX_TRAVEL_TIME = 0.16
+local TRACER_SEGMENT_LENGTH = 7.5
+local TRACER_MUZZLE_OFFSET = 0.35
 
 local weaponsByKey = combatConfig.Weapons
 local metaProgressionConfig = combatConfig.MetaProgression or {}
 local metaUpgradeConfig = metaProgressionConfig.Upgrades or {}
+local debugConfig = combatConfig.Debug or {}
 local classesConfig = combatConfig.Classes or {}
 local classDefinitions = classesConfig.Definitions or {}
 local classOrder = classesConfig.Order or { "Assault", "Builder", "Healer", "Melee" }
+local grantAllWeaponsOnSpawn = debugConfig.GrantAllWeaponsOnSpawn == true
 local toolNameToWeaponKey = {}
 for weaponKey, definition in pairs(weaponsByKey) do
 	toolNameToWeaponKey[definition.ToolName] = weaponKey
+end
+
+local function getWeaponKeyFromTool(tool)
+	if not tool or not tool:IsA("Tool") then
+		return nil
+	end
+
+	local byAttribute = tool:GetAttribute("WeaponKey")
+	if type(byAttribute) == "string" and weaponsByKey[byAttribute] then
+		return byAttribute
+	end
+
+	local byName = toolNameToWeaponKey[tool.Name]
+	if byName and weaponsByKey[byName] then
+		return byName
+	end
+
+	return nil
 end
 
 local function resolveDefaultClassKey()
@@ -65,6 +93,7 @@ end
 
 local combatActionEvent = ensureRemoteEvent(COMBAT_ACTION_EVENT_NAME)
 local combatStateEvent = ensureRemoteEvent(COMBAT_STATE_EVENT_NAME)
+local combatFeedbackEvent = ensureRemoteEvent(COMBAT_FEEDBACK_EVENT_NAME)
 local shopEvent = ensureRemoteEvent(SHOP_EVENT_NAME)
 
 local pickupFolder = Workspace:FindFirstChild("AmmoPickups")
@@ -72,6 +101,16 @@ if not pickupFolder then
 	pickupFolder = Instance.new("Folder")
 	pickupFolder.Name = "AmmoPickups"
 	pickupFolder.Parent = Workspace
+end
+
+local ammoConfig = combatConfig.Ammo or {}
+local infiniteReserveAmmo = ammoConfig.InfiniteReserve ~= false
+local spawnAmmoPickups = ammoConfig.SpawnPickups == true
+
+if not spawnAmmoPickups then
+	for _, child in ipairs(pickupFolder:GetChildren()) do
+		child:Destroy()
+	end
 end
 
 local stateByPlayer = {}
@@ -149,6 +188,21 @@ local function ensureMoneyStat(player)
 end
 
 local function createSound(parent, name, soundId, volume)
+	local existing = parent:FindFirstChild(name)
+	if existing and existing:IsA("Sound") then
+		if type(soundId) == "string" and soundId ~= "" then
+			existing.SoundId = soundId
+		end
+		if volume ~= nil then
+			existing.Volume = volume
+		end
+		return existing
+	end
+
+	if type(soundId) ~= "string" or soundId == "" then
+		return nil
+	end
+
 	local sound = Instance.new("Sound")
 	sound.Name = name
 	sound.SoundId = soundId
@@ -157,7 +211,155 @@ local function createSound(parent, name, soundId, volume)
 	return sound
 end
 
-local function buildWeaponTool(weaponKey)
+local function purgeExecutableDescendants(root)
+	for _, inst in ipairs(root:GetDescendants()) do
+		if inst:IsA("Script") or inst:IsA("LocalScript") or inst:IsA("ModuleScript") then
+			inst:Destroy()
+		end
+	end
+end
+
+local function ensureToolHandle(tool)
+	local handle = tool:FindFirstChild("Handle")
+	if handle and handle:IsA("BasePart") then
+		return handle
+	end
+
+	local fallbackAnchor = nil
+	for _, inst in ipairs(tool:GetDescendants()) do
+		if inst:IsA("BasePart") then
+			fallbackAnchor = inst
+			break
+		end
+	end
+
+	handle = Instance.new("Part")
+	handle.Name = "Handle"
+	handle.Size = Vector3.new(1, 1, 1)
+	handle.Transparency = 1
+	handle.CanCollide = false
+	handle.CanTouch = false
+	handle.CanQuery = false
+	handle.Massless = true
+	handle.TopSurface = Enum.SurfaceType.Smooth
+	handle.BottomSurface = Enum.SurfaceType.Smooth
+	handle.Parent = tool
+
+	if fallbackAnchor then
+		handle.CFrame = fallbackAnchor.CFrame
+		local weld = Instance.new("WeldConstraint")
+		weld.Part0 = handle
+		weld.Part1 = fallbackAnchor
+		weld.Parent = handle
+	end
+
+	return handle
+end
+
+local function getToolGripForward(tool)
+	if not tool then
+		return Vector3.new(0, 0, -1)
+	end
+
+	local forward = tool.GripForward
+	if typeof(forward) ~= "Vector3" or forward.Magnitude < 0.001 then
+		return Vector3.new(0, 0, -1)
+	end
+
+	return forward.Unit
+end
+
+local function getMuzzleLocalOffset(tool, handle, padding)
+	local forward = getToolGripForward(tool)
+	local size = handle.Size
+	local halfLength = (math.abs(forward.X) * size.X + math.abs(forward.Y) * size.Y + math.abs(forward.Z) * size.Z) * 0.5
+	return forward * (halfLength + (padding or 0.2))
+end
+
+local function sanitizeTemplateTool(tool, weaponKey, weapon)
+	purgeExecutableDescendants(tool)
+
+	local detectedShotSoundId = nil
+	local detectedReloadSoundId = nil
+
+	for _, inst in ipairs(tool:GetDescendants()) do
+		if inst:IsA("Sound") then
+			local soundId = tostring(inst.SoundId or "")
+			if soundId ~= "" then
+				local nameLower = string.lower(inst.Name)
+				if not detectedShotSoundId
+					and (string.find(nameLower, "fire", 1, true)
+						or string.find(nameLower, "shot", 1, true)
+						or string.find(nameLower, "shoot", 1, true))
+				then
+					detectedShotSoundId = soundId
+				elseif not detectedReloadSoundId
+					and (string.find(nameLower, "reload", 1, true)
+						or string.find(nameLower, "mag", 1, true)
+						or string.find(nameLower, "bolt", 1, true)
+						or string.find(nameLower, "cock", 1, true))
+				then
+					detectedReloadSoundId = soundId
+				end
+			end
+		end
+	end
+
+	for _, inst in ipairs(tool:GetDescendants()) do
+		if inst:IsA("Sound") then
+			inst:Destroy()
+		end
+	end
+
+	tool.Name = weapon.ToolName
+	tool.RequiresHandle = true
+	tool.CanBeDropped = false
+	tool:SetAttribute("WeaponKey", weaponKey)
+
+	local handle = ensureToolHandle(tool)
+	if not handle then
+		return nil
+	end
+
+	for _, inst in ipairs(tool:GetDescendants()) do
+		if inst:IsA("BasePart") then
+			inst.Anchored = false
+			inst.CanCollide = false
+			inst.CanTouch = false
+			inst.Massless = true
+		end
+	end
+
+	if weapon.Category == "Ranged" then
+		local muzzle = handle:FindFirstChild("Muzzle")
+		if not (muzzle and muzzle:IsA("Attachment")) then
+			muzzle = Instance.new("Attachment")
+			muzzle.Name = "Muzzle"
+			muzzle.Parent = handle
+		end
+		muzzle.Position = getMuzzleLocalOffset(tool, handle, 0.2)
+
+		local shotSoundId = weapon.ShotSoundId
+		if type(shotSoundId) ~= "string" or shotSoundId == "" then
+			shotSoundId = detectedShotSoundId or ""
+		end
+
+		local reloadSoundId = weapon.ReloadSoundId
+		if type(reloadSoundId) ~= "string" or reloadSoundId == "" then
+			reloadSoundId = detectedReloadSoundId or ""
+		end
+
+		createSound(handle, "ShotSound", shotSoundId, 0.9)
+		createSound(handle, "ReloadSound", reloadSoundId, 0.8)
+	else
+		createSound(handle, "SwingSound", weapon.SwingSoundId, 0.9)
+	end
+
+	createSound(handle, "PickupSound", "rbxasset://sounds/unsheath.wav", 0.7)
+	return tool
+end
+
+local function buildFallbackWeaponTool(weaponKey)
 	local weapon = weaponsByKey[weaponKey]
 	if not weapon then
 		return nil
@@ -228,7 +430,7 @@ local function buildWeaponTool(weaponKey)
 	if weapon.Category == "Ranged" then
 		local muzzle = Instance.new("Attachment")
 		muzzle.Name = "Muzzle"
-		muzzle.Position = Vector3.new(0, 0, -(handle.Size.Z * 0.5))
+		muzzle.Position = getMuzzleLocalOffset(tool, handle, 0.2)
 		muzzle.Parent = handle
 
 		createSound(handle, "ShotSound", weapon.ShotSoundId, 0.9)
@@ -239,6 +441,34 @@ local function buildWeaponTool(weaponKey)
 
 	createSound(handle, "PickupSound", "rbxasset://sounds/unsheath.wav", 0.7)
 	return tool
+end
+
+local function buildWeaponTool(weaponKey)
+	local weapon = weaponsByKey[weaponKey]
+	if not weapon then
+		return nil
+	end
+
+	local templateName = weapon.TemplateToolName or weapon.ToolName
+	local templateFolders = {
+		ServerStorage:FindFirstChild("WeaponTemplates"),
+		Workspace:FindFirstChild("Weapon"),
+	}
+
+	for _, templateFolder in ipairs(templateFolders) do
+		if templateFolder and templateFolder:IsA("Folder") then
+			local templateTool = templateFolder:FindFirstChild(templateName)
+			if templateTool and templateTool:IsA("Tool") then
+				local clonedTemplate = templateTool:Clone()
+				local sanitized = sanitizeTemplateTool(clonedTemplate, weaponKey, weapon)
+				if sanitized then
+					return sanitized
+				end
+			end
+		end
+	end
+
+	return buildFallbackWeaponTool(weaponKey)
 end
 
 local function ensureToolInContainer(container, weaponKey)
@@ -261,6 +491,18 @@ local function ensureToolInContainer(container, weaponKey)
 	end
 end
 
+local function purgeUnmanagedTools(container)
+	if not container then
+		return
+	end
+
+	for _, child in ipairs(container:GetChildren()) do
+		if child:IsA("Tool") and not getWeaponKeyFromTool(child) then
+			child:Destroy()
+		end
+	end
+end
+
 local function getEquippedWeaponKey(player)
 	local character = player.Character
 	if not character then
@@ -269,7 +511,7 @@ local function getEquippedWeaponKey(player)
 
 	for _, child in ipairs(character:GetChildren()) do
 		if child:IsA("Tool") then
-			local key = child:GetAttribute("WeaponKey") or toolNameToWeaponKey[child.Name]
+			local key = getWeaponKeyFromTool(child)
 			if key and weaponsByKey[key] then
 				return key
 			end
@@ -296,7 +538,7 @@ local function getAmmoStateForWeapon(playerState, weaponKey)
 
 	ammoState = {
 		mag = weapon.MaxMag,
-		reserve = weapon.StartReserve,
+		reserve = infiniteReserveAmmo and -1 or weapon.StartReserve,
 	}
 	playerState.ammoByWeapon[weaponKey] = ammoState
 	return ammoState
@@ -339,11 +581,36 @@ local function ensureOwnedLoadout(player)
 
 	local backpack = player:FindFirstChildOfClass("Backpack") or player:WaitForChild("Backpack", 5)
 	local starterGear = player:FindFirstChild("StarterGear") or player:WaitForChild("StarterGear", 5)
+	local character = player.Character
+
+	purgeUnmanagedTools(backpack)
+	purgeUnmanagedTools(starterGear)
+	purgeUnmanagedTools(character)
 
 	for weaponKey, owned in pairs(playerState.ownedWeapons) do
 		if owned then
 			ensureToolInContainer(backpack, weaponKey)
 			ensureToolInContainer(starterGear, weaponKey)
+		end
+	end
+end
+
+local function prepareWeaponTemplatesForRuntime()
+	local workspaceFolder = Workspace:FindFirstChild("Weapon")
+	if not (workspaceFolder and workspaceFolder:IsA("Folder")) then
+		return
+	end
+
+	local storageFolder = ServerStorage:FindFirstChild("WeaponTemplates")
+	if not storageFolder then
+		storageFolder = Instance.new("Folder")
+		storageFolder.Name = "WeaponTemplates"
+		storageFolder.Parent = ServerStorage
+	end
+
+	for _, child in ipairs(workspaceFolder:GetChildren()) do
+		if child:IsA("Tool") then
+			child.Parent = storageFolder
 		end
 	end
 end
@@ -428,6 +695,13 @@ local function applyClassLoadout(player, playerState, classKey)
 		end
 	end
 
+	if grantAllWeaponsOnSpawn then
+		for weaponKey in pairs(weaponsByKey) do
+			playerState.ownedWeapons[weaponKey] = true
+			getAmmoStateForWeapon(playerState, weaponKey)
+		end
+	end
+
 	player:SetAttribute("SelectedClass", normalizedClass)
 end
 
@@ -454,6 +728,9 @@ local function playHandleSound(player, weaponKey, soundName)
 
 	local sound = handle:FindFirstChild(soundName)
 	if sound and sound:IsA("Sound") then
+		if tostring(sound.SoundId) == "" then
+			return
+		end
 		sound:Play()
 	end
 end
@@ -492,15 +769,15 @@ local function getEquippedToolAndHandle(player, weapon)
 end
 
 local function getRangedFireOrigin(player, weapon)
-	local _, handle = getEquippedToolAndHandle(player, weapon)
+	local tool, handle = getEquippedToolAndHandle(player, weapon)
 	if handle then
 		local muzzle = handle:FindFirstChild("Muzzle")
 		if muzzle and muzzle:IsA("Attachment") then
 			return muzzle.WorldPosition
 		end
 
-		local muzzleOffset = -(handle.Size.Z * 0.5 + 0.2)
-		return (handle.CFrame * CFrame.new(0, 0, muzzleOffset)).Position
+		local localOffset = getMuzzleLocalOffset(tool, handle, 0.2)
+		return handle.CFrame:PointToWorldSpace(localOffset)
 	end
 
 	local root = getCharacterRoot(player)
@@ -544,25 +821,138 @@ local function tagHumanoidDamageByPlayer(humanoid, player)
 	Debris:AddItem(creator, KILL_TAG_LIFETIME)
 end
 
-local function makeTracer(origin, hitPosition)
-	local distance = (hitPosition - origin).Magnitude
-	if distance <= 0 then
+local function makeMuzzleFlash(origin, direction)
+	if typeof(origin) ~= "Vector3" then
 		return
 	end
 
-	local tracer = Instance.new("Part")
-	tracer.Name = "BulletTracer"
-	tracer.Anchored = true
-	tracer.CanCollide = false
-	tracer.CanQuery = false
-	tracer.CanTouch = false
-	tracer.Material = Enum.Material.Neon
-	tracer.Color = Color3.fromRGB(255, 226, 110)
-	tracer.Size = Vector3.new(0.08, 0.08, distance)
-	tracer.CFrame = CFrame.lookAt(origin, hitPosition) * CFrame.new(0, 0, -distance / 2)
-	tracer.Parent = Workspace
+	local dir = direction
+	if typeof(dir) ~= "Vector3" or dir.Magnitude < 0.001 then
+		dir = Vector3.new(0, 0, -1)
+	end
+	dir = dir.Unit
 
-	Debris:AddItem(tracer, 0.08)
+	local flash = Instance.new("Part")
+	flash.Name = "MuzzleFlash"
+	flash.Anchored = true
+	flash.CanCollide = false
+	flash.CanTouch = false
+	flash.CanQuery = false
+	flash.Material = Enum.Material.Neon
+	flash.Shape = Enum.PartType.Ball
+	flash.Color = Color3.fromRGB(255, 210, 125)
+	flash.Size = Vector3.new(0.24, 0.24, 0.24)
+	flash.Transparency = 0.12
+	flash.CFrame = CFrame.lookAt(origin + dir * 0.12, origin + dir)
+	flash.Parent = Workspace
+
+	local light = Instance.new("PointLight")
+	light.Brightness = 2.8
+	light.Range = 6
+	light.Color = flash.Color
+	light.Parent = flash
+
+	local tween = TweenService:Create(
+		flash,
+		TweenInfo.new(0.06, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+		{
+			Size = Vector3.new(0.04, 0.04, 0.04),
+			Transparency = 1,
+		}
+	)
+	tween:Play()
+	Debris:AddItem(flash, 0.09)
+end
+
+local function makeTracer(origin, hitPosition, shotDirection)
+	if typeof(origin) ~= "Vector3" or typeof(hitPosition) ~= "Vector3" then
+		return
+	end
+
+	local toHit = hitPosition - origin
+	local distance = toHit.Magnitude
+	if distance <= 0.001 then
+		return
+	end
+
+	local direction = shotDirection
+	if typeof(direction) ~= "Vector3" or direction.Magnitude < 0.001 then
+		direction = toHit
+	end
+	local unitDirection = direction.Unit
+
+	local tailPart = Instance.new("Part")
+	tailPart.Name = "BulletTracerTail"
+	tailPart.Anchored = true
+	tailPart.CanCollide = false
+	tailPart.CanTouch = false
+	tailPart.CanQuery = false
+	tailPart.Transparency = 1
+	tailPart.Size = Vector3.new(0.05, 0.05, 0.05)
+	tailPart.CFrame = CFrame.new(origin)
+	tailPart.Parent = Workspace
+
+	local headPart = Instance.new("Part")
+	headPart.Name = "BulletTracerHead"
+	headPart.Anchored = true
+	headPart.CanCollide = false
+	headPart.CanTouch = false
+	headPart.CanQuery = false
+	headPart.Transparency = 1
+	headPart.Size = Vector3.new(0.05, 0.05, 0.05)
+	headPart.CFrame = CFrame.new(origin)
+	headPart.Parent = Workspace
+
+	local tailAttachment = Instance.new("Attachment")
+	tailAttachment.Parent = tailPart
+	local headAttachment = Instance.new("Attachment")
+	headAttachment.Parent = headPart
+
+	local beam = Instance.new("Beam")
+	beam.Name = "BulletTracerBeam"
+	beam.Attachment0 = tailAttachment
+	beam.Attachment1 = headAttachment
+	beam.FaceCamera = true
+	beam.LightEmission = 1
+	beam.Brightness = 2.6
+	beam.Width0 = 0.14
+	beam.Width1 = 0.08
+	beam.Color = ColorSequence.new(Color3.fromRGB(255, 228, 125), Color3.fromRGB(255, 208, 95))
+	beam.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.55),
+		NumberSequenceKeypoint.new(0.2, 0.24),
+		NumberSequenceKeypoint.new(0.4, 0.06),
+		NumberSequenceKeypoint.new(0.66, 0.18),
+		NumberSequenceKeypoint.new(0.86, 0.38),
+		NumberSequenceKeypoint.new(1, 0.72),
+	})
+	beam.Parent = tailPart
+
+	local segmentLength = math.clamp(distance * 0.18, 4, TRACER_SEGMENT_LENGTH)
+	local travelTime = math.clamp(distance / TRACER_SPEED, TRACER_MIN_TRAVEL_TIME, TRACER_MAX_TRAVEL_TIME)
+	local cleanupAfter = travelTime + 0.12
+	Debris:AddItem(tailPart, cleanupAfter)
+	Debris:AddItem(headPart, cleanupAfter)
+
+	task.spawn(function()
+		local startTime = os.clock()
+		while true do
+			local elapsed = os.clock() - startTime
+			local alpha = elapsed / travelTime
+			if alpha >= 1 then
+				break
+			end
+
+			local headDistance = distance * alpha
+			local tailDistance = math.max(0, headDistance - segmentLength)
+			headPart.CFrame = CFrame.new(origin + unitDirection * headDistance)
+			tailPart.CFrame = CFrame.new(origin + unitDirection * tailDistance)
+			task.wait()
+		end
+
+		headPart.CFrame = CFrame.new(hitPosition)
+		tailPart.CFrame = CFrame.new(hitPosition - unitDirection * math.min(segmentLength, distance))
+	end)
 end
 
 local function applySpread(unitDirection, spreadDegrees)
@@ -595,13 +985,14 @@ local function isPlayerNearShop(player)
 	return (root.Position - prompt.Parent.Position).Magnitude <= maxDistance
 end
 
-local function fireSingleRay(player, weapon, origin, direction, damageMultiplier)
+local function fireSingleRay(player, weapon, damageOrigin, tracerOrigin, direction, damageMultiplier)
 	local rayParams = RaycastParams.new()
 	rayParams.FilterType = Enum.RaycastFilterType.Blacklist
 	rayParams.FilterDescendantsInstances = { player.Character }
 
-	local result = Workspace:Raycast(origin, direction * weapon.Range, rayParams)
-	local hitPosition = origin + direction * weapon.Range
+	local result = Workspace:Raycast(damageOrigin, direction * weapon.Range, rayParams)
+	local hitPosition = damageOrigin + direction * weapon.Range
+	local dealtDamage = 0
 
 	if result then
 		hitPosition = result.Position
@@ -610,10 +1001,13 @@ local function fireSingleRay(player, weapon, origin, direction, damageMultiplier
 			tagHumanoidDamageByPlayer(humanoid, player)
 			local finalDamage = math.max(1, math.floor((weapon.Damage * (damageMultiplier or 1)) + 0.5))
 			humanoid:TakeDamage(finalDamage)
+			dealtDamage = finalDamage
 		end
 	end
 
-	makeTracer(origin, hitPosition)
+	local tracerStart = tracerOrigin + direction.Unit * TRACER_MUZZLE_OFFSET
+	makeTracer(tracerStart, hitPosition, direction)
+	return dealtDamage, hitPosition
 end
 
 local handleReload
@@ -648,7 +1042,7 @@ local function handleFire(player, payload)
 	end
 
 	if ammoState.mag <= 0 then
-		if ammoState.reserve > 0 then
+		if infiniteReserveAmmo or ammoState.reserve > 0 then
 			handleReload(player)
 		end
 		return
@@ -658,36 +1052,78 @@ local function handleFire(player, payload)
 		return
 	end
 
-	local direction = payload.direction
-	if typeof(direction) ~= "Vector3" then
+	local payloadDirection = payload.direction
+	if typeof(payloadDirection) ~= "Vector3" then
 		return
 	end
 
-	if direction.Magnitude < 0.01 then
+	if payloadDirection.Magnitude < 0.01 then
 		return
 	end
 
-	local origin = getRangedFireOrigin(player, weapon)
-	if not origin then
+	local unitDirection = payloadDirection.Unit
+	local tracerOrigin = getRangedFireOrigin(player, weapon)
+	if not tracerOrigin then
 		return
+	end
+
+	local damageOrigin = tracerOrigin
+	local rayOrigin = payload.rayOrigin
+	local rayDirection = payload.rayDirection
+	if typeof(rayOrigin) == "Vector3" and typeof(rayDirection) == "Vector3" and rayDirection.Magnitude > 0.01 then
+		local character = player.Character
+		local head = character and character:FindFirstChild("Head")
+		local root = character and character:FindFirstChild("HumanoidRootPart")
+		local anchorPart = (head and head:IsA("BasePart")) and head or ((root and root:IsA("BasePart")) and root or nil)
+		if anchorPart and (rayOrigin - anchorPart.Position).Magnitude <= 16 then
+			damageOrigin = rayOrigin
+			unitDirection = rayDirection.Unit
+		end
+	end
+
+	local targetPosition = payload.targetPosition
+	if typeof(targetPosition) == "Vector3" then
+		local fromOrigin = targetPosition - damageOrigin
+		if fromOrigin.Magnitude > 0.01 then
+			unitDirection = fromOrigin.Unit
+		end
 	end
 
 	playerState.lastShotAt = os.clock()
 	ammoState.mag -= 1
 	sendCombatState(player)
+	makeMuzzleFlash(tracerOrigin, unitDirection)
 	playHandleSound(player, weaponKey, "ShotSound")
 
-	local unitDirection = direction.Unit
 	local pellets = math.max(1, weapon.Pellets or 1)
-	local spreadDegrees = weapon.SpreadDegrees or 0
+	local spreadDegrees = 0
 	local damageMultiplier = getRangedDamageMultiplier(player)
+	local totalDamage = 0
+	local hitCount = 0
+	local feedbackWorldPosition = nil
 
 	for _ = 1, pellets do
 		local pelletDirection = applySpread(unitDirection, spreadDegrees)
-		fireSingleRay(player, weapon, origin, pelletDirection, damageMultiplier)
+		local dealtDamage, hitPosition =
+			fireSingleRay(player, weapon, damageOrigin, tracerOrigin, pelletDirection, damageMultiplier)
+		if dealtDamage > 0 then
+			totalDamage += dealtDamage
+			hitCount += 1
+			feedbackWorldPosition = feedbackWorldPosition or hitPosition
+		end
 	end
 
-	if ammoState.mag <= 0 and ammoState.reserve > 0 then
+	if hitCount > 0 then
+		combatFeedbackEvent:FireClient(player, {
+			type = "hit",
+			damage = totalDamage,
+			hitCount = hitCount,
+			category = weapon.Category,
+			worldPosition = feedbackWorldPosition,
+		})
+	end
+
+	if ammoState.mag <= 0 and (infiniteReserveAmmo or ammoState.reserve > 0) then
 		handleReload(player)
 	end
 end
@@ -713,7 +1149,7 @@ handleReload = function(player)
 		return
 	end
 
-	if ammoState.mag >= weapon.MaxMag or ammoState.reserve <= 0 then
+	if ammoState.mag >= weapon.MaxMag or (not infiniteReserveAmmo and ammoState.reserve <= 0) then
 		return
 	end
 
@@ -734,16 +1170,21 @@ handleReload = function(player)
 			return
 		end
 
-		local need = weapon.MaxMag - currentAmmo.mag
-		local amount = math.min(need, currentAmmo.reserve)
-		currentAmmo.mag += amount
-		currentAmmo.reserve -= amount
+		if infiniteReserveAmmo then
+			currentAmmo.mag = weapon.MaxMag
+			currentAmmo.reserve = -1
+		else
+			local need = weapon.MaxMag - currentAmmo.mag
+			local amount = math.min(need, currentAmmo.reserve)
+			currentAmmo.mag += amount
+			currentAmmo.reserve -= amount
+		end
 		currentState.reloading = false
 		sendCombatState(player)
 	end)
 end
 
-local function handleMeleeSwing(player)
+local function handleMeleeSwing(player, payload)
 	local playerState = stateByPlayer[player]
 	if not playerState then
 		return
@@ -776,15 +1217,29 @@ local function handleMeleeSwing(player)
 		return
 	end
 
+	local facingDirection = root.CFrame.LookVector
+	if typeof(payload) == "table" then
+		local payloadDirection = payload.direction
+		if typeof(payloadDirection) == "Vector3" then
+			local planar = Vector3.new(payloadDirection.X, 0, payloadDirection.Z)
+			if planar.Magnitude > 0.01 then
+				facingDirection = planar.Unit
+			end
+		end
+	end
+
 	local overlapParams = OverlapParams.new()
 	overlapParams.FilterType = Enum.RaycastFilterType.Blacklist
 	overlapParams.FilterDescendantsInstances = { character }
 
-	local center = root.Position + Vector3.new(0, 1.4, 0) + root.CFrame.LookVector * (weapon.Range * 0.5)
+	local center = root.Position + Vector3.new(0, 1.4, 0) + facingDirection * (weapon.Range * 0.5)
 	local parts = Workspace:GetPartBoundsInRadius(center, weapon.Range, overlapParams)
 	local hitModels = {}
 	local damageMultiplier = getMeleeDamageMultiplier(player)
 	local finalDamage = math.max(1, math.floor((weapon.Damage * damageMultiplier) + 0.5))
+	local totalDamage = 0
+	local hitCount = 0
+	local feedbackWorldPosition = nil
 
 	for _, part in ipairs(parts) do
 		local model = part:FindFirstAncestorOfClass("Model")
@@ -795,15 +1250,28 @@ local function handleMeleeSwing(player)
 				local toTarget = targetRoot.Position - root.Position
 				local planarToTarget = Vector3.new(toTarget.X, 0, toTarget.Z)
 				if planarToTarget.Magnitude > 0 and planarToTarget.Magnitude <= weapon.Range * 1.15 then
-					local facingDot = root.CFrame.LookVector:Dot(planarToTarget.Unit)
+					local facingDot = facingDirection:Dot(planarToTarget.Unit)
 					if facingDot > -0.25 then
 						tagHumanoidDamageByPlayer(humanoid, player)
 						humanoid:TakeDamage(finalDamage)
 						hitModels[model] = true
+						totalDamage += finalDamage
+						hitCount += 1
+						feedbackWorldPosition = feedbackWorldPosition or targetRoot.Position
 					end
 				end
 			end
 		end
+	end
+
+	if hitCount > 0 then
+		combatFeedbackEvent:FireClient(player, {
+			type = "hit",
+			damage = totalDamage,
+			hitCount = hitCount,
+			category = weapon.Category,
+			worldPosition = feedbackWorldPosition,
+		})
 	end
 end
 
@@ -943,8 +1411,8 @@ local function buildShopPayload(player, message)
 				category = weapon.Category,
 				price = weapon.Price,
 				owned = playerState and playerState.ownedWeapons[weaponKey] or false,
-				ammoPackPrice = weapon.AmmoPackPrice or 0,
-				ammoPackAmount = weapon.AmmoPackAmount or 0,
+				ammoPackPrice = infiniteReserveAmmo and 0 or (weapon.AmmoPackPrice or 0),
+				ammoPackAmount = infiniteReserveAmmo and 0 or (weapon.AmmoPackAmount or 0),
 			})
 		end
 	end
@@ -993,6 +1461,10 @@ local function processBuyAmmo(player, weaponKey)
 	local playerState = stateByPlayer[player]
 	if not playerState then
 		return "State error."
+	end
+
+	if infiniteReserveAmmo then
+		return "Ammo reserve is infinite in this mode."
 	end
 
 	local weapon = weaponsByKey[weaponKey]
@@ -1184,6 +1656,10 @@ local function setupPlayer(player)
 
 		character.ChildAdded:Connect(function(child)
 			if child:IsA("Tool") then
+				if not getWeaponKeyFromTool(child) then
+					child:Destroy()
+					return
+				end
 				sendCombatState(player)
 			end
 		end)
@@ -1200,6 +1676,7 @@ local function setupPlayer(player)
 	end)
 
 	if player.Character then
+		ensureOwnedLoadout(player)
 		task.delay(0.2, function()
 			sendCombatState(player)
 		end)
@@ -1211,6 +1688,7 @@ local function cleanupPlayer(player)
 end
 
 ensureShopNpc()
+prepareWeaponTemplatesForRuntime()
 
 for _, player in ipairs(Players:GetPlayers()) do
 	setupPlayer(player)
@@ -1231,7 +1709,7 @@ combatActionEvent.OnServerEvent:Connect(function(player, action, payload)
 	end
 
 	if action == "swing" or action == "melee" then
-		handleMeleeSwing(player)
+		handleMeleeSwing(player, payload)
 	end
 end)
 
@@ -1262,11 +1740,13 @@ shopEvent.OnServerEvent:Connect(function(player, action, weaponKey)
 	end
 end)
 
-task.spawn(function()
-	while true do
-		task.wait(combatConfig.Pickups.SpawnInterval)
-		for _, player in ipairs(Players:GetPlayers()) do
-			spawnAmmoPickupForPlayer(player)
+if spawnAmmoPickups then
+	task.spawn(function()
+		while true do
+			task.wait(combatConfig.Pickups.SpawnInterval)
+			for _, player in ipairs(Players:GetPlayers()) do
+				spawnAmmoPickupForPlayer(player)
+			end
 		end
-	end
-end)
+	end)
+end

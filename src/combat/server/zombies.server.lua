@@ -5,6 +5,7 @@ local Workspace = game:GetService("Workspace")
 local Debris = game:GetService("Debris")
 local MarketplaceService = game:GetService("MarketplaceService")
 local TeleportService = game:GetService("TeleportService")
+local KeyframeSequenceProvider = game:GetService("KeyframeSequenceProvider")
 
 local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local combatConfig = require(sharedFolder:WaitForChild("CombatConfig"))
@@ -71,6 +72,50 @@ local function ensureFolder(name)
 	return folder
 end
 
+local function ensureExtractedAnimationsFolder(targetRoot)
+	local folder = targetRoot:FindFirstChild("ExtractedAnimations")
+	if folder and folder:IsA("Folder") then
+		return folder
+	end
+
+	folder = Instance.new("Folder")
+	folder.Name = "ExtractedAnimations"
+	folder.Parent = targetRoot
+	return folder
+end
+
+local function preserveAnimationsFromScript(scriptInstance, targetRoot)
+	if not scriptInstance or not targetRoot then
+		return 0
+	end
+
+	local preserved = 0
+	local animationsFolder = ensureExtractedAnimationsFolder(targetRoot)
+
+	for _, desc in ipairs(scriptInstance:GetDescendants()) do
+		if desc:IsA("Animation") then
+			local animationId = tostring(desc.AnimationId or "")
+			if animationId ~= "" then
+				local clone = Instance.new("Animation")
+				clone.Name = desc.Name
+				clone.AnimationId = animationId
+				clone.Parent = animationsFolder
+				preserved += 1
+			end
+		elseif desc:IsA("KeyframeSequence") then
+			local okClone, clone = pcall(function()
+				return desc:Clone()
+			end)
+			if okClone and clone then
+				clone.Parent = animationsFolder
+				preserved += 1
+			end
+		end
+	end
+
+	return preserved
+end
+
 local zombiesFolder = ensureFolder(ZOMBIES_FOLDER_NAME)
 local spawnPointsFolder = ensureFolder(SPAWN_POINTS_FOLDER_NAME)
 local downedFolder = ensureFolder(DOWNED_FOLDER_NAME)
@@ -80,6 +125,60 @@ if not gamePointsFolder then
 	gamePointsFolder = Instance.new("Folder")
 	gamePointsFolder.Name = GAME_POINTS_FOLDER_NAME
 	gamePointsFolder.Parent = Workspace
+end
+
+local function purgeScriptsFromFolder(folderName)
+	local folder = Workspace:FindFirstChild(folderName)
+	if not folder then
+		return 0
+	end
+
+	local removed = 0
+	for _, inst in ipairs(folder:GetDescendants()) do
+		if inst:IsA("Script") or inst:IsA("LocalScript") or inst:IsA("ModuleScript") then
+			local targetRoot = inst:FindFirstAncestorOfClass("Model") or folder
+			preserveAnimationsFromScript(inst, targetRoot)
+			removed += 1
+			inst:Destroy()
+		end
+	end
+	return removed
+end
+
+local function purgeBlockedSoundsFromFolder(folderName)
+	local folder = Workspace:FindFirstChild(folderName)
+	if not folder then
+		return 0
+	end
+
+	local removed = 0
+	for _, inst in ipairs(folder:GetDescendants()) do
+		if inst:IsA("Sound") then
+			local soundId = string.lower(tostring(inst.SoundId))
+			if soundId == "rbxasset://sounds/swoosh.wav" then
+				removed += 1
+				inst:Destroy()
+			end
+		end
+	end
+	return removed
+end
+
+local removedWeaponScripts = purgeScriptsFromFolder("Weapon")
+local removedEnemyScripts = purgeScriptsFromFolder("Enemy")
+local removedWeaponSounds = purgeBlockedSoundsFromFolder("Weapon")
+local removedEnemySounds = purgeBlockedSoundsFromFolder("Enemy")
+if removedWeaponScripts > 0 or removedEnemyScripts > 0 then
+	warn(
+		("[Survival] Removed toolbox scripts: Weapon=%d Enemy=%d")
+			:format(removedWeaponScripts, removedEnemyScripts)
+	)
+end
+if removedWeaponSounds > 0 or removedEnemySounds > 0 then
+	warn(
+		("[Survival] Removed blocked sounds: Weapon=%d Enemy=%d")
+			:format(removedWeaponSounds, removedEnemySounds)
+	)
 end
 
 local function ensureStartSpawn()
@@ -112,6 +211,7 @@ local wipeState = {
 	endsAt = 0,
 }
 local clearReviveOptions
+local cleanupZombieAnimationTracks
 
 local matchState = {
 	runId = 0,
@@ -500,7 +600,21 @@ local function clearAllDownedMarkers()
 end
 
 local function clearAllZombies()
-	for model in pairs(zombieStates) do
+	for model, state in pairs(zombieStates) do
+		if cleanupZombieAnimationTracks then
+			cleanupZombieAnimationTracks(state)
+		elseif state and state.animationTracks then
+			for _, track in pairs(state.animationTracks) do
+				if track then
+					pcall(function()
+						track:Stop(0.05)
+						track:Destroy()
+					end)
+				end
+			end
+			state.animationTracks = nil
+		end
+
 		if model and model.Parent then
 			model:Destroy()
 		end
@@ -911,14 +1025,348 @@ local function resolveGroundY(position)
 	return position.Y
 end
 
-local function createZombie(position, variantKey, stage)
-	local variant = variantConfig[variantKey] or variantConfig.Walker
-	variantKey = variantConfig[variantKey] and variantKey or "Walker"
+local zombieTemplateCache = {}
 
-	local zombie = Instance.new("Model")
+local function sanitizeTemplateZombieContent(model)
+	for _, inst in ipairs(model:GetDescendants()) do
+		if inst:IsA("Script") or inst:IsA("LocalScript") or inst:IsA("ModuleScript") then
+			preserveAnimationsFromScript(inst, model)
+			inst:Destroy()
+		elseif inst:IsA("Sound") then
+			local soundId = string.lower(tostring(inst.SoundId))
+			if soundId == "rbxasset://sounds/swoosh.wav" then
+				inst:Destroy()
+			end
+		end
+	end
+end
+
+local function findZombieTemplate(templateName)
+	if type(templateName) ~= "string" or templateName == "" then
+		return nil
+	end
+
+	local cached = zombieTemplateCache[templateName]
+	if cached and cached.Parent then
+		return cached
+	end
+
+	local function isUsableTemplateModel(inst)
+		if not inst or not inst:IsA("Model") then
+			return false
+		end
+
+		local hasBasePart = inst:FindFirstChildWhichIsA("BasePart", true)
+		local hasHumanoid = inst:FindFirstChildOfClass("Humanoid")
+		return hasBasePart ~= nil and hasHumanoid ~= nil
+	end
+
+	local enemyFolder = Workspace:FindFirstChild("Enemy")
+	if enemyFolder then
+		for _, inst in ipairs(enemyFolder:GetDescendants()) do
+			if inst:IsA("Model") and inst.Name == templateName and isUsableTemplateModel(inst) then
+				zombieTemplateCache[templateName] = inst
+				return inst
+			end
+		end
+	end
+
+	for _, inst in ipairs(Workspace:GetDescendants()) do
+		if inst:IsA("Model") and inst.Name == templateName then
+			if isUsableTemplateModel(inst)
+				and not inst:IsDescendantOf(zombiesFolder)
+				and not inst:IsDescendantOf(downedFolder)
+			then
+				zombieTemplateCache[templateName] = inst
+				return inst
+			end
+		end
+	end
+
+	return nil
+end
+
+local function findTemplateRootPart(model)
+	local root = model:FindFirstChild("HumanoidRootPart", true)
+	if root and root:IsA("BasePart") then
+		return root
+	end
+
+	local primaryPart = model.PrimaryPart
+	if primaryPart and primaryPart:IsA("BasePart") then
+		return primaryPart
+	end
+
+	return model:FindFirstChildWhichIsA("BasePart", true)
+end
+
+local function findFirstNamedKeyframeSequence(root, names)
+	if not root or type(names) ~= "table" then
+		return nil
+	end
+
+	local sequences = {}
+	for _, desc in ipairs(root:GetDescendants()) do
+		if desc:IsA("KeyframeSequence") then
+			table.insert(sequences, desc)
+		end
+	end
+
+	for _, wantedName in ipairs(names) do
+		local wanted = string.lower(tostring(wantedName))
+		for _, sequence in ipairs(sequences) do
+			if string.lower(sequence.Name) == wanted then
+				return sequence
+			end
+		end
+	end
+
+	for _, wantedName in ipairs(names) do
+		local wanted = string.lower(tostring(wantedName))
+		for _, sequence in ipairs(sequences) do
+			if string.find(string.lower(sequence.Name), wanted, 1, true) then
+				return sequence
+			end
+		end
+	end
+
+	return nil
+end
+
+local function findFirstNamedAnimation(root, names)
+	if not root or type(names) ~= "table" then
+		return nil
+	end
+
+	local animations = {}
+	for _, desc in ipairs(root:GetDescendants()) do
+		if desc:IsA("Animation") then
+			local animationId = tostring(desc.AnimationId or "")
+			if animationId ~= "" then
+				table.insert(animations, desc)
+			end
+		end
+	end
+
+	for _, wantedName in ipairs(names) do
+		local wanted = string.lower(tostring(wantedName))
+		for _, animation in ipairs(animations) do
+			if string.lower(animation.Name) == wanted then
+				return animation
+			end
+		end
+	end
+
+	for _, wantedName in ipairs(names) do
+		local wanted = string.lower(tostring(wantedName))
+		for _, animation in ipairs(animations) do
+			if string.find(string.lower(animation.Name), wanted, 1, true) then
+				return animation
+			end
+		end
+	end
+
+	return nil
+end
+
+local function loadTrackFromKeyframeSequence(animator, sequence, looped, priority)
+	if not animator or not sequence then
+		return nil
+	end
+
+	local okRegister, registeredId = pcall(function()
+		return KeyframeSequenceProvider:RegisterKeyframeSequence(sequence)
+	end)
+	if not okRegister or type(registeredId) ~= "string" or registeredId == "" then
+		return nil
+	end
+
+	local animation = Instance.new("Animation")
+	animation.AnimationId = registeredId
+	local okLoad, track = pcall(function()
+		return animator:LoadAnimation(animation)
+	end)
+	animation:Destroy()
+
+	if not okLoad or not track then
+		return nil
+	end
+
+	track.Looped = looped == true
+	track.Priority = priority or Enum.AnimationPriority.Movement
+	return track
+end
+
+local function loadTrackFromAnimation(animator, sourceAnimation, looped, priority)
+	if not animator or not sourceAnimation or not sourceAnimation:IsA("Animation") then
+		return nil
+	end
+
+	local animationId = tostring(sourceAnimation.AnimationId or "")
+	if animationId == "" then
+		return nil
+	end
+
+	local animation = Instance.new("Animation")
+	animation.AnimationId = animationId
+	local okLoad, track = pcall(function()
+		return animator:LoadAnimation(animation)
+	end)
+	animation:Destroy()
+
+	if not okLoad or not track then
+		return nil
+	end
+
+	track.Looped = looped == true
+	track.Priority = priority or Enum.AnimationPriority.Movement
+	return track
+end
+
+local function buildZombieAnimationTracks(zombie, humanoid)
+	local animSaves = zombie:FindFirstChild("AnimSaves", true)
+
+	local animator = humanoid:FindFirstChildOfClass("Animator")
+	if not animator then
+		animator = Instance.new("Animator")
+		animator.Parent = humanoid
+	end
+
+	local keyframeRoot = animSaves or zombie
+
+	local tracks = {
+		idle = loadTrackFromAnimation(
+			animator,
+			findFirstNamedAnimation(zombie, { "Idle", "IdleAnim", "ToolNoneAnim", "Stand", "Breath" }),
+			true,
+			Enum.AnimationPriority.Movement
+		) or loadTrackFromKeyframeSequence(
+			animator,
+			findFirstNamedKeyframeSequence(keyframeRoot, { "Idle" }),
+			true,
+			Enum.AnimationPriority.Movement
+		),
+		walk = loadTrackFromAnimation(
+			animator,
+			findFirstNamedAnimation(zombie, { "WalkAnim", "RunAnim", "Walk", "Run" }),
+			true,
+			Enum.AnimationPriority.Movement
+		) or loadTrackFromKeyframeSequence(
+			animator,
+			findFirstNamedKeyframeSequence(keyframeRoot, { "Walk", "Run", "CursedGolemWalk" }),
+			true,
+			Enum.AnimationPriority.Movement
+		),
+		attack = loadTrackFromAnimation(
+			animator,
+			findFirstNamedAnimation(zombie, { "Attack", "AttackAnim", "Hit", "Slash", "Stab" }),
+			false,
+			Enum.AnimationPriority.Action
+		) or loadTrackFromKeyframeSequence(
+			animator,
+			findFirstNamedKeyframeSequence(keyframeRoot, { "Attack", "Hit", "Slash" }),
+			false,
+			Enum.AnimationPriority.Action
+		),
+	}
+
+	if not tracks.idle and not tracks.walk and not tracks.attack then
+		return nil
+	end
+
+	return tracks
+end
+
+local function prepareTemplateZombieModel(position, variant, variantKey, health, moveSpeed)
+	local template = findZombieTemplate(variant.TemplateModelName)
+	if not template then
+		return nil, nil, nil, nil, nil
+	end
+
+	local zombie = template:Clone()
+	sanitizeTemplateZombieContent(zombie)
+
+	local humanoid = zombie:FindFirstChildOfClass("Humanoid")
+	if not humanoid then
+		humanoid = Instance.new("Humanoid")
+		humanoid.Name = "Humanoid"
+		humanoid.Parent = zombie
+	end
+
+	humanoid.MaxHealth = health
+	humanoid.Health = health
+	humanoid.WalkSpeed = moveSpeed
+	humanoid.AutoRotate = false
+	humanoid.BreakJointsOnDeath = false
+	humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
+
+	local root = findTemplateRootPart(zombie)
+	if not root then
+		zombie:Destroy()
+		return nil, nil, nil, nil, nil
+	end
+
+	if root.Name ~= "HumanoidRootPart" then
+		local syntheticRoot = Instance.new("Part")
+		syntheticRoot.Name = "HumanoidRootPart"
+		syntheticRoot.Size = Vector3.new(2, 2, 1)
+		syntheticRoot.Transparency = 1
+		syntheticRoot.Anchored = true
+		syntheticRoot.CanCollide = false
+		syntheticRoot.CanTouch = false
+		syntheticRoot.CanQuery = true
+		syntheticRoot.CFrame = root.CFrame
+		syntheticRoot.Parent = zombie
+
+		local weld = Instance.new("WeldConstraint")
+		weld.Part0 = syntheticRoot
+		weld.Part1 = root
+		weld.Parent = syntheticRoot
+		root = syntheticRoot
+	end
+
+	local templateScale = tonumber(variant.TemplateScale)
+	if templateScale and templateScale > 0 then
+		pcall(function()
+			zombie:ScaleTo(templateScale)
+		end)
+	end
+
+	for _, inst in ipairs(zombie:GetDescendants()) do
+		if inst:IsA("BasePart") then
+			inst.Anchored = inst == root
+			inst.CanCollide = false
+			inst.CanTouch = false
+			inst.CanQuery = true
+			inst.Massless = true
+			if inst == root then
+				inst.Transparency = 1
+			end
+		end
+	end
+
+	local head = zombie:FindFirstChild("Head", true)
+	if not (head and head:IsA("BasePart")) then
+		head = root
+	end
+
+	local _, boundsSize = zombie:GetBoundingBox()
+	local groundY = resolveGroundY(position)
+	local yOffset = boundsSize.Y * 0.5 + 0.1 + (variant.FlyHeight or 0)
+	local spawnPosition = Vector3.new(position.X, groundY + yOffset, position.Z)
+
 	zombie.Name = "Zombie_" .. variantKey
 	zombie:SetAttribute("IsZombie", true)
 	zombie:SetAttribute("ZombieVariant", variantKey)
+	zombie.PrimaryPart = root
+	zombie:PivotTo(CFrame.lookAt(spawnPosition, spawnPosition + Vector3.new(0, 0, -1)))
+
+	return zombie, humanoid, root, head, nil
+end
+
+local function createZombie(position, variantKey, stage)
+	local variant = variantConfig[variantKey] or variantConfig.Walker
+	variantKey = variantConfig[variantKey] and variantKey or "Walker"
 
 	local multipliers = getDifficultyMultipliers()
 	local health = getScaledValue(zombieConfig.BaseHealth, zombieConfig.HealthScalePerStage, stage, (variant.HealthMul or 1) * multipliers.health)
@@ -933,51 +1381,84 @@ local function createZombie(position, variantKey, stage)
 	local torsoColor = colorFromRgbArray(variant.Color, Color3.fromRGB(77, 142, 74))
 	local headColor = colorFromRgbArray(variant.HeadColor, Color3.fromRGB(101, 170, 95))
 
-	local humanoid = Instance.new("Humanoid")
-	humanoid.Name = "Humanoid"
-	humanoid.MaxHealth = health
-	humanoid.Health = health
-	humanoid.WalkSpeed = moveSpeed
-	humanoid.AutoRotate = false
-	humanoid.BreakJointsOnDeath = false
-	humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
-	humanoid.Parent = zombie
+	local isFlyerVariant = variant.IsFlyer == true or variantKey == "Flyer"
+	local isSpitterVariant = variant.IsSpitter == true or variantKey == "Spitter"
+	local isBomberVariant = variant.IsBomber == true or variantKey == "Bomber"
 
-	local root = Instance.new("Part")
-	root.Name = "HumanoidRootPart"
-	root.Size = Vector3.new(2, 2, 1)
-	root.Transparency = 1
-	root.Anchored = true
-	root.CanCollide = false
-	root.CanTouch = false
-	root.CanQuery = false
-	root.Parent = zombie
+	local zombie, humanoid, root, head, animationTracks =
+		prepareTemplateZombieModel(position, variant, variantKey, health, moveSpeed)
 
-	local torso = Instance.new("Part")
-	torso.Name = "Torso"
-	torso.Size = Vector3.new(2.4, 2.6 * bodyScaleY, 1.4)
-	torso.Material = Enum.Material.SmoothPlastic
-	torso.Color = torsoColor
-	torso.Anchored = true
-	torso.CanCollide = true
-	torso.Parent = zombie
+	if not zombie then
+		zombie = Instance.new("Model")
+		zombie.Name = "Zombie_" .. variantKey
+		zombie:SetAttribute("IsZombie", true)
+		zombie:SetAttribute("ZombieVariant", variantKey)
 
-	local head = Instance.new("Part")
-	head.Name = "Head"
-	head.Size = Vector3.new(2, 1.2 * bodyScaleY, 1.2)
-	head.Material = Enum.Material.SmoothPlastic
-	head.Color = headColor
-	head.Anchored = true
-	head.CanCollide = true
-	head.Parent = zombie
+		humanoid = Instance.new("Humanoid")
+		humanoid.Name = "Humanoid"
+		humanoid.MaxHealth = health
+		humanoid.Health = health
+		humanoid.WalkSpeed = moveSpeed
+		humanoid.AutoRotate = false
+		humanoid.BreakJointsOnDeath = false
+		humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
+		humanoid.Parent = zombie
 
-	local face = Instance.new("Decal")
-	face.Name = "face"
-	face.Face = Enum.NormalId.Front
-	face.Texture = "rbxasset://textures/face.png"
-	face.Parent = head
+		root = Instance.new("Part")
+		root.Name = "HumanoidRootPart"
+		root.Size = Vector3.new(2, 2, 1)
+		root.Transparency = 1
+		root.Anchored = true
+		root.CanCollide = false
+		root.CanTouch = false
+		root.CanQuery = true
+		root.Parent = zombie
 
-	if variantKey == "Flyer" then
+		local torso = Instance.new("Part")
+		torso.Name = "Torso"
+		torso.Size = Vector3.new(2.4, 2.6 * bodyScaleY, 1.4)
+		torso.Material = Enum.Material.SmoothPlastic
+		torso.Color = torsoColor
+		torso.Anchored = true
+		torso.CanCollide = true
+		torso.Parent = zombie
+
+		head = Instance.new("Part")
+		head.Name = "Head"
+		head.Size = Vector3.new(2, 1.2 * bodyScaleY, 1.2)
+		head.Material = Enum.Material.SmoothPlastic
+		head.Color = headColor
+		head.Anchored = true
+		head.CanCollide = true
+		head.Parent = zombie
+
+		local face = Instance.new("Decal")
+		face.Name = "face"
+		face.Face = Enum.NormalId.Front
+		face.Texture = "rbxasset://textures/face.png"
+		face.Parent = head
+
+		local rootToTorso = Instance.new("WeldConstraint")
+		rootToTorso.Part0 = root
+		rootToTorso.Part1 = torso
+		rootToTorso.Parent = torso
+
+		local rootToHead = Instance.new("WeldConstraint")
+		rootToHead.Part0 = root
+		rootToHead.Part1 = head
+		rootToHead.Parent = head
+
+		local groundY = resolveGroundY(position)
+		local baseYOffset = torso.Size.Y * 0.5 + 0.1
+		local yOffset = baseYOffset + (variant.FlyHeight or 0)
+		root.CFrame = CFrame.new(position.X, groundY + yOffset, position.Z)
+		torso.CFrame = root.CFrame
+		head.CFrame = root.CFrame * CFrame.new(0, 1.8 * bodyScaleY, 0)
+
+		zombie.PrimaryPart = root
+	end
+
+	if isFlyerVariant then
 		local leftWing = Instance.new("Part")
 		leftWing.Name = "LeftWing"
 		leftWing.Size = Vector3.new(0.2, 1.2, 3.2)
@@ -1005,25 +1486,10 @@ local function createZombie(position, variantKey, stage)
 		weldRight.Parent = rightWing
 	end
 
-	local rootToTorso = Instance.new("WeldConstraint")
-	rootToTorso.Part0 = root
-	rootToTorso.Part1 = torso
-	rootToTorso.Parent = torso
-
-	local rootToHead = Instance.new("WeldConstraint")
-	rootToHead.Part0 = root
-	rootToHead.Part1 = head
-	rootToHead.Parent = head
-
-	local groundY = resolveGroundY(position)
-	local baseYOffset = torso.Size.Y * 0.5 + 0.1
-	local yOffset = baseYOffset + (variant.FlyHeight or 0)
-	root.CFrame = CFrame.new(position.X, groundY + yOffset, position.Z)
-	torso.CFrame = root.CFrame
-	head.CFrame = root.CFrame * CFrame.new(0, 1.8 * bodyScaleY, 0)
-
-	zombie.PrimaryPart = root
 	zombie.Parent = zombiesFolder
+	if not animationTracks then
+		animationTracks = buildZombieAnimationTracks(zombie, humanoid)
+	end
 
 	attachZombieHealthBar(zombie, humanoid, head, variant.DisplayName or variantKey)
 
@@ -1031,6 +1497,7 @@ local function createZombie(position, variantKey, stage)
 		model = zombie,
 		humanoid = humanoid,
 		root = root,
+		animationTracks = animationTracks,
 		variantKey = variantKey,
 		variant = variant,
 		moveSpeed = moveSpeed,
@@ -1044,9 +1511,9 @@ local function createZombie(position, variantKey, stage)
 		lastSpit = 0,
 		dead = false,
 		exploded = false,
-		isFlyer = variantKey == "Flyer",
-		isSpitter = variantKey == "Spitter",
-		isBomber = variantKey == "Bomber",
+		isFlyer = isFlyerVariant,
+		isSpitter = isSpitterVariant,
+		isBomber = isBomberVariant,
 		spitRange = variant.SpitRange or 0,
 		spitDamage = (variant.SpitDamage or 0) * (1 + stage * zombieConfig.DamageScalePerStage) * multipliers.damage,
 		spitCooldown = variant.SpitCooldown or 0,
@@ -1056,6 +1523,11 @@ local function createZombie(position, variantKey, stage)
 		explosionTriggerRange = variant.ExplosionTriggerRange or 0,
 		flyHeight = variant.FlyHeight or 0,
 		isBoss = variant.IsBoss == true,
+		visualPhase = math.random() * math.pi * 2,
+		attackAnimDuration = 0.24,
+		attackAnimStartedAt = 0,
+		attackAnimEndsAt = 0,
+		lastMoveAnimated = false,
 	}
 
 	zombieStates[zombie] = state
@@ -1067,6 +1539,9 @@ local function createZombie(position, variantKey, stage)
 
 		state.dead = true
 		humanoid.Health = 0
+		if cleanupZombieAnimationTracks then
+			cleanupZombieAnimationTracks(state)
+		end
 
 		if not matchState.ended then
 			awardZombieKillToParty(state.rewardMoney, state.rewardXP)
@@ -1097,6 +1572,9 @@ local function createZombie(position, variantKey, stage)
 
 	zombie.AncestryChanged:Connect(function(_, parent)
 		if not parent then
+			if cleanupZombieAnimationTracks then
+				cleanupZombieAnimationTracks(state)
+			end
 			zombieStates[zombie] = nil
 		end
 	end)
@@ -2038,6 +2516,105 @@ local function orientationFromForward(forward)
 	return planar.Unit
 end
 
+local function stopZombieTrack(track, fadeTime)
+	if track and track.IsPlaying then
+		track:Stop(fadeTime or 0.12)
+	end
+end
+
+local function playZombieTrack(track, fadeTime, speed)
+	if not track then
+		return
+	end
+
+	if track.IsPlaying then
+		if speed then
+			track:AdjustSpeed(speed)
+		end
+		return
+	end
+
+	track:Play(fadeTime or 0.12, 1, speed or 1)
+end
+
+local function updateZombieLocomotionAnimation(state, isMoving)
+	local tracks = state.animationTracks
+	if not tracks then
+		return
+	end
+
+	local walkSpeedScale = math.clamp((state.moveSpeed or zombieConfig.BaseMoveSpeed) / zombieConfig.BaseMoveSpeed, 0.75, 1.45)
+
+	if isMoving then
+		playZombieTrack(tracks.walk, 0.15, walkSpeedScale)
+		stopZombieTrack(tracks.idle, 0.15)
+	else
+		playZombieTrack(tracks.idle, 0.2, 1)
+		stopZombieTrack(tracks.walk, 0.15)
+	end
+end
+
+local function triggerZombieAttackAnimation(state, now)
+	local currentTime = now or os.clock()
+	state.attackAnimStartedAt = currentTime
+	state.attackAnimEndsAt = currentTime + state.attackAnimDuration
+
+	local tracks = state.animationTracks
+	if tracks and tracks.attack then
+		stopZombieTrack(tracks.attack, 0.05)
+		playZombieTrack(tracks.attack, 0.05, 1)
+	end
+end
+
+local function buildZombiePoseCFrame(state, basePosition, lookForward, isMoving, now, deltaTime)
+	if state.animationTracks then
+		return CFrame.lookAt(basePosition, basePosition + lookForward)
+	end
+
+	local phaseSpeed = isMoving and (2.1 + (state.moveSpeed or 5) * 0.16) or 1.1
+	state.visualPhase = (state.visualPhase + phaseSpeed * deltaTime) % (math.pi * 2)
+
+	local bobAmp
+	if state.isFlyer then
+		bobAmp = isMoving and 0.22 or 0.1
+	else
+		bobAmp = isMoving and 0.16 or 0.04
+	end
+
+	local bobOffset = math.sin(state.visualPhase) * bobAmp
+	local swayOffset = math.sin(state.visualPhase * 2) * (isMoving and 0.025 or 0.01)
+
+	local attackCurve = 0
+	if state.attackAnimEndsAt > now and state.attackAnimDuration > 0 then
+		local elapsed = now - state.attackAnimStartedAt
+		local progress = math.clamp(elapsed / state.attackAnimDuration, 0, 1)
+		attackCurve = math.sin(progress * math.pi)
+	end
+
+	local lungeDistance = attackCurve * (state.isFlyer and 0.15 or 0.28)
+	local pitch = attackCurve * 0.18 + swayOffset
+	local roll = math.sin(state.visualPhase * 1.3) * (isMoving and 0.02 or 0.008)
+	local adjustedPosition = basePosition + Vector3.new(0, bobOffset, 0) + lookForward * lungeDistance
+	return CFrame.lookAt(adjustedPosition, adjustedPosition + lookForward) * CFrame.Angles(pitch, 0, roll)
+end
+
+cleanupZombieAnimationTracks = function(state)
+	if not state or not state.animationTracks then
+		return
+	end
+
+	for _, track in pairs(state.animationTracks) do
+		if track then
+			pcall(function()
+				track:Stop(0.05)
+				track:Destroy()
+			end)
+		end
+	end
+
+	state.animationTracks = nil
+end
+
 task.spawn(function()
 	while true do
 		if matchState.ended then
@@ -2075,6 +2652,7 @@ RunService.Heartbeat:Connect(function(deltaTime)
 		local root = state.root
 
 		if not zombie.Parent or not humanoid or humanoid.Health <= 0 or not root or not root.Parent then
+			cleanupZombieAnimationTracks(state)
 			zombieStates[zombie] = nil
 		else
 			local _, targetHumanoid, targetRoot, distance = getNearestPlayer(root.Position)
@@ -2097,25 +2675,42 @@ RunService.Heartbeat:Connect(function(deltaTime)
 
 				if state.isSpitter and distance <= state.spitRange and now - state.lastSpit >= state.spitCooldown then
 					state.lastSpit = now
+					triggerZombieAttackAnimation(state, now)
 					spawnSpitProjectile(state, targetRoot.Position + Vector3.new(0, 1.4, 0))
 				end
 
-				if movementDistance > state.attackRange then
+				local isMoving = movementDistance > state.attackRange
+				local basePosition = root.Position
+
+				if isMoving then
 					local maxStep = state.moveSpeed * deltaTime
-					local step = math.min(maxStep, movementDistance - state.attackRange * 0.55)
+					local approachDistance = math.max(0, movementDistance - state.attackRange * 0.55)
+					local step = math.min(maxStep, approachDistance)
 					if step > 0 then
-						local newPos = root.Position + forward * step
-						zombie:PivotTo(CFrame.lookAt(newPos, newPos + lookForward))
+						basePosition = basePosition + forward * step
 					else
-						zombie:PivotTo(CFrame.lookAt(root.Position, root.Position + lookForward))
+						isMoving = false
 					end
-				else
-					zombie:PivotTo(CFrame.lookAt(root.Position, root.Position + lookForward))
+				end
+
+				if not isMoving then
 					if now - state.lastAttack >= state.attackCooldown then
 						state.lastAttack = now
+						triggerZombieAttackAnimation(state, now)
 						targetHumanoid:TakeDamage(state.attackDamage)
 					end
 				end
+
+				state.lastMoveAnimated = isMoving
+				updateZombieLocomotionAnimation(state, isMoving)
+				local posedCFrame = buildZombiePoseCFrame(state, basePosition, lookForward, isMoving, now, deltaTime)
+				zombie:PivotTo(posedCFrame)
+			else
+				state.lastMoveAnimated = false
+				updateZombieLocomotionAnimation(state, false)
+				local idleForward = orientationFromForward(root.CFrame.LookVector)
+				local idleCFrame = buildZombiePoseCFrame(state, root.Position, idleForward, false, now, deltaTime)
+				zombie:PivotTo(idleCFrame)
 			end
 		end
 	end

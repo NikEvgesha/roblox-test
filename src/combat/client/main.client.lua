@@ -1,11 +1,13 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+local SoundService = game:GetService("SoundService")
 local UserInputService = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
 
 local COMBAT_ACTION_EVENT_NAME = "CombatAction"
 local COMBAT_STATE_EVENT_NAME = "CombatState"
+local COMBAT_FEEDBACK_EVENT_NAME = "CombatFeedback"
 local SHOP_EVENT_NAME = "ShopEvent"
 local SKILL_EVENT_NAME = "SkillEvent"
 local SURVIVAL_EVENT_NAME = "SurvivalEvent"
@@ -18,6 +20,7 @@ local combatConfig = require(sharedFolder:WaitForChild("CombatConfig"))
 
 local combatActionEvent = ReplicatedStorage:WaitForChild(COMBAT_ACTION_EVENT_NAME)
 local combatStateEvent = ReplicatedStorage:WaitForChild(COMBAT_STATE_EVENT_NAME)
+local combatFeedbackEvent = ReplicatedStorage:WaitForChild(COMBAT_FEEDBACK_EVENT_NAME)
 local shopEvent = ReplicatedStorage:WaitForChild(SHOP_EVENT_NAME)
 local skillEvent = ReplicatedStorage:WaitForChild(SKILL_EVENT_NAME)
 local survivalEvent = ReplicatedStorage:WaitForChild(SURVIVAL_EVENT_NAME)
@@ -319,6 +322,52 @@ crosshairVertical.BackgroundColor3 = Color3.fromRGB(245, 245, 245)
 crosshairVertical.BorderSizePixel = 0
 crosshairVertical.Parent = crosshairFrame
 
+local combatFxLayer = Instance.new("Frame")
+combatFxLayer.Name = "CombatFxLayer"
+combatFxLayer.Size = UDim2.fromScale(1, 1)
+combatFxLayer.BackgroundTransparency = 1
+combatFxLayer.BorderSizePixel = 0
+combatFxLayer.ZIndex = 50
+combatFxLayer.Parent = gui
+
+local hitMarkerFrame = Instance.new("Frame")
+hitMarkerFrame.Name = "HitMarker"
+hitMarkerFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+hitMarkerFrame.Position = UDim2.fromScale(0.5, 0.5)
+hitMarkerFrame.Size = UDim2.fromOffset(30, 30)
+hitMarkerFrame.BackgroundTransparency = 1
+hitMarkerFrame.Visible = false
+hitMarkerFrame.ZIndex = 55
+hitMarkerFrame.Parent = combatFxLayer
+
+local hitMarkerLineA = Instance.new("Frame")
+hitMarkerLineA.Name = "LineA"
+hitMarkerLineA.AnchorPoint = Vector2.new(0.5, 0.5)
+hitMarkerLineA.Position = UDim2.fromScale(0.5, 0.5)
+hitMarkerLineA.Size = UDim2.fromOffset(3, 24)
+hitMarkerLineA.BackgroundColor3 = Color3.fromRGB(255, 240, 196)
+hitMarkerLineA.BorderSizePixel = 0
+hitMarkerLineA.Rotation = 45
+hitMarkerLineA.ZIndex = 55
+hitMarkerLineA.Parent = hitMarkerFrame
+
+local hitMarkerLineB = Instance.new("Frame")
+hitMarkerLineB.Name = "LineB"
+hitMarkerLineB.AnchorPoint = Vector2.new(0.5, 0.5)
+hitMarkerLineB.Position = UDim2.fromScale(0.5, 0.5)
+hitMarkerLineB.Size = UDim2.fromOffset(3, 24)
+hitMarkerLineB.BackgroundColor3 = Color3.fromRGB(255, 240, 196)
+hitMarkerLineB.BorderSizePixel = 0
+hitMarkerLineB.Rotation = -45
+hitMarkerLineB.ZIndex = 55
+hitMarkerLineB.Parent = hitMarkerFrame
+
+local hitConfirmSound = Instance.new("Sound")
+hitConfirmSound.Name = "HitConfirm"
+hitConfirmSound.SoundId = ""
+hitConfirmSound.Volume = 0
+hitConfirmSound.Parent = SoundService
+
 local shopFrame = Instance.new("Frame")
 shopFrame.Name = "ShopFrame"
 shopFrame.AnchorPoint = Vector2.new(1, 0)
@@ -490,18 +539,20 @@ local currentHealth = 100
 local maxHealth = 100
 local currentXp = 0
 local currentLevel = 1
-local meleeAnimationToggle = false
 local shopItems = {}
 local skillPoints = 0
 local skillStateItems = {}
 local animationTracksByHumanoid = setmetatable({}, { __mode = "k" })
+local activeDamageNumbers = {}
 local SHOP_AUTO_CLOSE_DISTANCE = 15
 local SPECTATOR_MOVE_SPEED = 36
 local SPECTATOR_FAST_MULTIPLIER = 2
 local SPECTATOR_SLOW_MULTIPLIER = 0.45
 local SPECTATOR_MOUSE_SENSITIVITY = 0.0025
 local SPECTATOR_MAX_PITCH = math.rad(82)
+local DAMAGE_NUMBER_LIFETIME = 0.75
 local getCurrentWeapon
+local mouse = player:GetMouse()
 local spectatorModeEnabled = false
 local spectatorIsDowned = false
 local spectatorPosition = Vector3.new(0, 10, 0)
@@ -509,6 +560,27 @@ local spectatorYaw = 0
 local spectatorPitch = 0
 local spectatorLookActive = false
 local rightMouseHeld = false
+local hitMarkerTimer = 0
+local recoilPitch = 0
+local recoilYaw = 0
+local leftMouseHeld = false
+local nextAutoFireAt = 0
+local MELEE_AUTO_LOCK_DISTANCE = 8
+local RANGED_AIM_LOCK_DISTANCE = 10
+local LOOK_ROTATE_LERP_SPEED = 20
+local CURSOR_RAY_DISTANCE = 2000
+local AIM_MOTOR_LERP_SPEED = 14
+local AIM_PITCH_UP_LIMIT = math.rad(45)
+local AIM_PITCH_DOWN_LIMIT = math.rad(65)
+local AIM_YAW_LIMIT = math.rad(35)
+local HEAD_PITCH_FACTOR = 0.8
+local HEAD_YAW_FACTOR = 0.8
+local ARM_PITCH_FACTOR = 1.25
+local ARM_YAW_FACTOR = 0.75
+local WAIST_PITCH_FACTOR = 0.4
+local WAIST_YAW_FACTOR = 0.55
+local HIP_PITCH_FACTOR = 0.1
+local HIP_YAW_FACTOR = 0.16
 local spectatorInput = {
 	forward = false,
 	back = false,
@@ -519,6 +591,7 @@ local spectatorInput = {
 	fast = false,
 	slow = false,
 }
+local aimRigByCharacter = setmetatable({}, { __mode = "k" })
 
 local function hasBlockingUiOpen()
 	return shopFrame.Visible or skillsFrame.Visible or reviveButtonsFrame.Visible
@@ -526,7 +599,10 @@ end
 
 local function updateCrosshairVisibility()
 	local _, weapon = getCurrentWeapon()
-	crosshairFrame.Visible = aimModeEnabled and weapon and weapon.Category == "Ranged" and not hasBlockingUiOpen()
+	crosshairFrame.Visible = not spectatorModeEnabled
+		and weapon
+		and weapon.Category == "Ranged"
+		and not hasBlockingUiOpen()
 end
 
 local function setAimModeEnabled(enabled)
@@ -540,19 +616,428 @@ local function setAimModeEnabled(enabled)
 	end
 
 	aimModeEnabled = enabled
-	if aimModeEnabled then
-		UserInputService.MouseBehavior = Enum.MouseBehavior.LockCurrentPosition
-		UserInputService.MouseIconEnabled = false
-	else
-		if not spectatorModeEnabled then
-			if UserInputService.MouseBehavior ~= Enum.MouseBehavior.Default then
-				UserInputService.MouseBehavior = Enum.MouseBehavior.Default
-			end
-			UserInputService.MouseIconEnabled = true
-		end
+	if not spectatorModeEnabled and UserInputService.MouseBehavior ~= Enum.MouseBehavior.Default then
+		UserInputService.MouseBehavior = Enum.MouseBehavior.Default
 	end
 
 	updateCrosshairVisibility()
+end
+
+local function findNearestZombieRoot(origin, maxDistance)
+	local zombiesFolder = Workspace:FindFirstChild("Zombies")
+	if not zombiesFolder then
+		return nil
+	end
+
+	local bestRoot = nil
+	local bestDistanceSq = maxDistance * maxDistance
+	for _, child in ipairs(zombiesFolder:GetChildren()) do
+		if child:IsA("Model") then
+			local humanoid = child:FindFirstChildOfClass("Humanoid")
+			local root = child:FindFirstChild("HumanoidRootPart")
+			if humanoid and humanoid.Health > 0 and root and root:IsA("BasePart") then
+				local offset = root.Position - origin
+				local distanceSq = offset.X * offset.X + offset.Y * offset.Y + offset.Z * offset.Z
+				if distanceSq <= bestDistanceSq then
+					bestDistanceSq = distanceSq
+					bestRoot = root
+				end
+			end
+		end
+	end
+
+	return bestRoot
+end
+
+local function getMouseViewportPosition()
+	return Vector2.new(math.max(0, mouse.X), math.max(0, mouse.Y))
+end
+
+local function getCursorWorldPosition(camera, ignoreCharacter, maxDistance)
+	local distance = math.max(1, tonumber(maxDistance) or CURSOR_RAY_DISTANCE)
+	local unitRay = mouse.UnitRay
+	local rayOrigin = unitRay and unitRay.Origin or camera.CFrame.Position
+	local rayDirection = unitRay and unitRay.Direction or camera.CFrame.LookVector
+	local rayParams = RaycastParams.new()
+	rayParams.FilterType = Enum.RaycastFilterType.Blacklist
+	rayParams.FilterDescendantsInstances = ignoreCharacter and { ignoreCharacter } or {}
+
+	local result = Workspace:Raycast(rayOrigin, rayDirection * distance, rayParams)
+	if result then
+		return result.Position
+	end
+
+	return rayOrigin + rayDirection * distance
+end
+
+local function resolveRangedAimTargetPosition(camera, character, root, weapon)
+	if aimModeEnabled then
+		local lockRoot = findNearestZombieRoot(root.Position, RANGED_AIM_LOCK_DISTANCE)
+		if lockRoot then
+			return lockRoot.Position + Vector3.new(0, 1.2, 0)
+		end
+	end
+
+	local aimDistance = CURSOR_RAY_DISTANCE
+	if weapon and typeof(weapon.Range) == "number" then
+		aimDistance = math.max(weapon.Range, 50)
+	end
+
+	return getCursorWorldPosition(camera, character, aimDistance)
+end
+
+local function rotateRootTowards(root, targetPosition, deltaTime)
+	local planar = Vector3.new(targetPosition.X - root.Position.X, 0, targetPosition.Z - root.Position.Z)
+	if planar.Magnitude < 0.001 then
+		return
+	end
+
+	local currentLook = root.CFrame.LookVector
+	local currentPlanar = Vector3.new(currentLook.X, 0, currentLook.Z)
+	if currentPlanar.Magnitude < 0.001 then
+		currentPlanar = planar.Unit
+	else
+		currentPlanar = currentPlanar.Unit
+	end
+
+	local alpha = math.clamp(deltaTime * LOOK_ROTATE_LERP_SPEED, 0, 1)
+	local blended = currentPlanar:Lerp(planar.Unit, alpha)
+	if blended.Magnitude < 0.001 then
+		return
+	end
+
+	local lookDirection = blended.Unit
+	root.CFrame = CFrame.lookAt(root.Position, root.Position + lookDirection)
+end
+
+local function resolveAimRig(character)
+	local cached = aimRigByCharacter[character]
+	if cached then
+		local hasAny = false
+		if cached.neck and cached.neck.Parent then
+			hasAny = true
+		elseif cached.rightShoulder and cached.rightShoulder.Parent then
+			hasAny = true
+		elseif cached.leftShoulder and cached.leftShoulder.Parent then
+			hasAny = true
+		elseif cached.waist and cached.waist.Parent then
+			hasAny = true
+		elseif cached.rightHip and cached.rightHip.Parent then
+			hasAny = true
+		elseif cached.leftHip and cached.leftHip.Parent then
+			hasAny = true
+		end
+		if hasAny then
+			return cached
+		end
+	end
+
+	local rig = {
+		neck = nil,
+		rightShoulder = nil,
+		leftShoulder = nil,
+		waist = nil,
+		rightHip = nil,
+		leftHip = nil,
+		baseC0 = {},
+	}
+
+	for _, desc in ipairs(character:GetDescendants()) do
+		if desc:IsA("Motor6D") then
+			if desc.Name == "Neck" then
+				rig.neck = rig.neck or desc
+			elseif desc.Name == "RightShoulder" or desc.Name == "Right Shoulder" then
+				rig.rightShoulder = rig.rightShoulder or desc
+			elseif desc.Name == "LeftShoulder" or desc.Name == "Left Shoulder" then
+				rig.leftShoulder = rig.leftShoulder or desc
+			elseif desc.Name == "Waist" then
+				rig.waist = rig.waist or desc
+			elseif desc.Name == "RightHip" or desc.Name == "Right Hip" then
+				rig.rightHip = rig.rightHip or desc
+			elseif desc.Name == "LeftHip" or desc.Name == "Left Hip" then
+				rig.leftHip = rig.leftHip or desc
+			end
+		end
+	end
+
+	if rig.neck then
+		rig.baseC0.neck = rig.neck.C0
+	end
+	if rig.rightShoulder then
+		rig.baseC0.rightShoulder = rig.rightShoulder.C0
+	end
+	if rig.leftShoulder then
+		rig.baseC0.leftShoulder = rig.leftShoulder.C0
+	end
+	if rig.waist then
+		rig.baseC0.waist = rig.waist.C0
+	end
+	if rig.rightHip then
+		rig.baseC0.rightHip = rig.rightHip.C0
+	end
+	if rig.leftHip then
+		rig.baseC0.leftHip = rig.leftHip.C0
+	end
+
+	aimRigByCharacter[character] = rig
+	return rig
+end
+
+local function lerpMotorC0(motor, baseC0, targetOffset, alpha)
+	if not motor then
+		return
+	end
+
+	local referenceC0 = baseC0 or motor.C0
+	local offset = targetOffset or CFrame.identity
+	local targetC0 = referenceC0 * offset
+	motor.C0 = motor.C0:Lerp(targetC0, alpha)
+end
+
+local function resetAimRig(character, deltaTime)
+	local rig = resolveAimRig(character)
+	local alpha = math.clamp(deltaTime * AIM_MOTOR_LERP_SPEED, 0, 1)
+	lerpMotorC0(rig.neck, rig.baseC0.neck, CFrame.identity, alpha)
+	lerpMotorC0(rig.rightShoulder, rig.baseC0.rightShoulder, CFrame.identity, alpha)
+	lerpMotorC0(rig.leftShoulder, rig.baseC0.leftShoulder, CFrame.identity, alpha)
+	lerpMotorC0(rig.waist, rig.baseC0.waist, CFrame.identity, alpha)
+	lerpMotorC0(rig.rightHip, rig.baseC0.rightHip, CFrame.identity, alpha)
+	lerpMotorC0(rig.leftHip, rig.baseC0.leftHip, CFrame.identity, alpha)
+end
+
+local function updateAimRig(character, root, targetPosition, deltaTime)
+	local rig = resolveAimRig(character)
+	if not rig then
+		return
+	end
+
+	local toTarget = targetPosition - root.Position
+	if toTarget.Magnitude < 0.001 then
+		resetAimRig(character, deltaTime)
+		return
+	end
+
+	local localDirection = root.CFrame:VectorToObjectSpace(toTarget.Unit)
+	local horizontalMag = math.sqrt(localDirection.X * localDirection.X + localDirection.Z * localDirection.Z)
+	if horizontalMag < 0.001 then
+		horizontalMag = 0.001
+	end
+
+	local pitchUp = math.atan2(localDirection.Y, horizontalMag)
+	local yawRight = math.atan2(localDirection.X, -localDirection.Z)
+	local pitch = math.clamp(-pitchUp, -AIM_PITCH_UP_LIMIT, AIM_PITCH_DOWN_LIMIT)
+	local yaw = math.clamp(yawRight, -AIM_YAW_LIMIT, AIM_YAW_LIMIT)
+
+	local headTarget = CFrame.Angles(pitch * HEAD_PITCH_FACTOR, yaw * HEAD_YAW_FACTOR, 0)
+	local armTarget = CFrame.Angles(pitch * ARM_PITCH_FACTOR, yaw * ARM_YAW_FACTOR, 0)
+	local waistTarget = CFrame.Angles(pitch * WAIST_PITCH_FACTOR, yaw * WAIST_YAW_FACTOR, 0)
+	local hipsTarget = CFrame.Angles(-pitch * HIP_PITCH_FACTOR, -yaw * HIP_YAW_FACTOR, 0)
+	local alpha = math.clamp(deltaTime * AIM_MOTOR_LERP_SPEED, 0, 1)
+
+	lerpMotorC0(rig.neck, rig.baseC0.neck, headTarget, alpha)
+	lerpMotorC0(rig.rightShoulder, rig.baseC0.rightShoulder, armTarget, alpha)
+	lerpMotorC0(rig.leftShoulder, rig.baseC0.leftShoulder, armTarget, alpha)
+	lerpMotorC0(rig.waist, rig.baseC0.waist, waistTarget, alpha)
+	lerpMotorC0(rig.rightHip, rig.baseC0.rightHip, hipsTarget, alpha)
+	lerpMotorC0(rig.leftHip, rig.baseC0.leftHip, hipsTarget, alpha)
+end
+
+local function updateGameplayFacing(deltaTime)
+	if spectatorModeEnabled then
+		return
+	end
+
+	local weaponKey, weapon = getCurrentWeapon()
+	local character = player.Character
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	local camera = Workspace.CurrentCamera
+	local blockingUi = hasBlockingUiOpen()
+	local meleeLockRoot = nil
+
+	if weapon and weapon.Category == "Melee" and root and root:IsA("BasePart") then
+		meleeLockRoot = findNearestZombieRoot(root.Position, MELEE_AUTO_LOCK_DISTANCE)
+	end
+
+	if humanoid then
+		local shouldForceFacing = weapon
+			and (weapon.Category == "Ranged" or (weapon.Category == "Melee" and meleeLockRoot ~= nil))
+			and not blockingUi
+		humanoid.AutoRotate = not shouldForceFacing
+	end
+
+	if blockingUi then
+		return
+	end
+
+	if not weaponKey or not weapon or not root or not root:IsA("BasePart") then
+		return
+	end
+
+	if weapon.Category == "Ranged" and not camera then
+		return
+	end
+
+	local targetPosition = nil
+	if weapon.Category == "Ranged" then
+		targetPosition = resolveRangedAimTargetPosition(camera, character, root, weapon)
+	elseif weapon.Category == "Melee" and meleeLockRoot then
+		targetPosition = meleeLockRoot.Position + Vector3.new(0, 1.2, 0)
+	end
+
+	if targetPosition then
+		rotateRootTowards(root, targetPosition, deltaTime)
+	end
+
+	if weapon.Category == "Ranged" and targetPosition then
+		updateAimRig(character, root, targetPosition, deltaTime)
+	else
+		resetAimRig(character, deltaTime)
+	end
+end
+
+local function updateGameplayCursorState()
+	updateCrosshairVisibility()
+
+	if crosshairFrame.Visible then
+		local viewportPosition = getMouseViewportPosition()
+		crosshairFrame.Position = UDim2.fromOffset(viewportPosition.X, viewportPosition.Y)
+	end
+
+	hitMarkerFrame.Position = crosshairFrame.Visible and crosshairFrame.Position or UDim2.fromScale(0.5, 0.5)
+
+	if spectatorModeEnabled then
+		return
+	end
+
+	if crosshairFrame.Visible then
+		UserInputService.MouseIconEnabled = false
+		mouse.Icon = ""
+	else
+		UserInputService.MouseIconEnabled = true
+		mouse.Icon = "rbxasset://SystemCursors/Arrow"
+	end
+end
+
+local function showHitMarker(hitCount)
+	hitMarkerTimer = 0.11
+	hitMarkerFrame.Visible = true
+
+	local isMultiHit = (tonumber(hitCount) or 1) > 1
+	local color = isMultiHit and Color3.fromRGB(255, 208, 140) or Color3.fromRGB(255, 240, 196)
+	hitMarkerLineA.BackgroundColor3 = color
+	hitMarkerLineB.BackgroundColor3 = color
+end
+
+local function playHitConfirm(hitCount, isMelee)
+	if tostring(hitConfirmSound.SoundId) == "" then
+		return
+	end
+
+	hitConfirmSound.PlaybackSpeed = isMelee and 0.9 or math.clamp(1 + (tonumber(hitCount) or 1) * 0.02, 1, 1.2)
+	hitConfirmSound.TimePosition = 0
+	hitConfirmSound:Play()
+end
+
+local function spawnDamageNumber(worldPosition, damage, hitCount, isMelee)
+	if typeof(worldPosition) ~= "Vector3" then
+		return
+	end
+
+	local label = Instance.new("TextLabel")
+	label.Name = "DamageNumber"
+	label.AnchorPoint = Vector2.new(0.5, 0.5)
+	label.Position = UDim2.fromScale(0.5, 0.5)
+	label.Size = UDim2.fromOffset(120, 34)
+	label.BackgroundTransparency = 1
+	label.Font = Enum.Font.GothamBlack
+	label.TextSize = 22
+	label.TextStrokeTransparency = 0.35
+	label.TextColor3 = isMelee and Color3.fromRGB(255, 188, 128) or Color3.fromRGB(255, 226, 154)
+	label.Text = ("-%d"):format(math.max(1, math.floor(tonumber(damage) or 0)))
+	label.ZIndex = 56
+	label.Parent = combatFxLayer
+
+	local count = math.max(1, math.floor(tonumber(hitCount) or 1))
+	if count > 1 then
+		label.Text = ("%s x%d"):format(label.Text, count)
+	end
+
+	table.insert(activeDamageNumbers, {
+		label = label,
+		worldPosition = worldPosition,
+		age = 0,
+		verticalRise = 4 + math.random() * 2,
+		horizontalOffset = (math.random() - 0.5) * 2,
+	})
+end
+
+local function updateDamageNumbers(deltaTime)
+	local camera = Workspace.CurrentCamera
+	if not camera then
+		return
+	end
+
+	for i = #activeDamageNumbers, 1, -1 do
+		local entry = activeDamageNumbers[i]
+		entry.age += deltaTime
+		local progress = entry.age / DAMAGE_NUMBER_LIFETIME
+		local label = entry.label
+
+		if progress >= 1 or not label or not label.Parent then
+			if label and label.Parent then
+				label:Destroy()
+			end
+			table.remove(activeDamageNumbers, i)
+		else
+			local rise = entry.verticalRise * progress
+			local worldPosition =
+				entry.worldPosition + Vector3.new(entry.horizontalOffset * progress, 2.4 + rise, 0)
+			local viewportPosition, onScreen = camera:WorldToViewportPoint(worldPosition)
+			if onScreen and viewportPosition.Z > 0 then
+				label.Visible = true
+				label.Position = UDim2.fromOffset(viewportPosition.X, viewportPosition.Y)
+			else
+				label.Visible = false
+			end
+
+			label.TextTransparency = 0.08 + progress * 0.92
+			label.TextStrokeTransparency = 0.35 + progress * 0.65
+		end
+	end
+end
+
+local function applyShotRecoil(weapon)
+	if spectatorModeEnabled or not weapon or weapon.Category ~= "Ranged" then
+		return
+	end
+
+	-- Keep recoil visually neutral so it doesn't feel like bullet spread.
+	recoilPitch = 0
+	recoilYaw = 0
+end
+
+local function updateRecoil(deltaTime)
+	if spectatorModeEnabled then
+		recoilPitch = 0
+		recoilYaw = 0
+		return
+	end
+
+	local camera = Workspace.CurrentCamera
+	if not camera or camera.CameraType == Enum.CameraType.Scriptable then
+		return
+	end
+
+	if math.abs(recoilPitch) > 0.00005 or math.abs(recoilYaw) > 0.00005 then
+		camera.CFrame = camera.CFrame * CFrame.Angles(0, recoilYaw, 0)
+		local decay = math.exp(-22 * deltaTime)
+		recoilPitch = 0
+		recoilYaw *= decay
+	else
+		recoilPitch = 0
+		recoilYaw = 0
+	end
 end
 
 local function clearSpectatorInput()
@@ -574,9 +1059,11 @@ local function setSpectatorLookActive(enabled)
 	if spectatorLookActive then
 		UserInputService.MouseBehavior = Enum.MouseBehavior.LockCurrentPosition
 		UserInputService.MouseIconEnabled = false
+		mouse.Icon = ""
 	else
 		UserInputService.MouseBehavior = Enum.MouseBehavior.Default
 		UserInputService.MouseIconEnabled = true
+		mouse.Icon = "rbxasset://SystemCursors/Arrow"
 	end
 end
 
@@ -625,6 +1112,7 @@ local function setSpectatorMode(enabled)
 
 		UserInputService.MouseBehavior = Enum.MouseBehavior.Default
 		UserInputService.MouseIconEnabled = true
+		mouse.Icon = "rbxasset://SystemCursors/Arrow"
 		return
 	end
 
@@ -637,6 +1125,7 @@ local function setSpectatorMode(enabled)
 	end
 	UserInputService.MouseBehavior = Enum.MouseBehavior.Default
 	UserInputService.MouseIconEnabled = true
+	mouse.Icon = "rbxasset://SystemCursors/Arrow"
 end
 
 local function setDownedSpectatorState(downed)
@@ -953,7 +1442,11 @@ local function refreshCombatHud()
 
 	if weapon and weapon.Category == "Ranged" then
 		local suffix = isReloading and " (reloading)" or ""
-		ammoLabel.Text = ("Ammo: %d / %d%s"):format(ammoMag, ammoReserve, suffix)
+		if ammoReserve < 0 then
+			ammoLabel.Text = ("Ammo: %d / INF%s"):format(ammoMag, suffix)
+		else
+			ammoLabel.Text = ("Ammo: %d / %d%s"):format(ammoMag, ammoReserve, suffix)
+		end
 		controlsLabel.Text = "LMB fire | RMB aim | R reload | E interact | B open shop"
 	elseif weapon and weapon.Category == "Melee" then
 		ammoLabel.Text = "Ammo: --"
@@ -1119,7 +1612,7 @@ local function buildShopRow(item)
 		end)
 	end
 
-	if item.category == "Ranged" then
+	if item.category == "Ranged" and (item.ammoPackPrice or 0) > 0 and (item.ammoPackAmount or 0) > 0 then
 		local ammoButton = Instance.new("TextButton")
 		ammoButton.Position = UDim2.new(1, -202, 1, -34)
 		ammoButton.Size = UDim2.fromOffset(192, 26)
@@ -1238,15 +1731,11 @@ local function playWeaponFireAnimation(weaponKey)
 	end
 
 	if weapon.Category == "Ranged" then
-		playAnimationById(weapon.FireAnimationId, 1.05)
-	else
-		local animationId = weapon.SwingAnimationId
-		if meleeAnimationToggle and weapon.SwingAltAnimationId then
-			animationId = weapon.SwingAltAnimationId
-		end
-		meleeAnimationToggle = not meleeAnimationToggle
-		playAnimationById(animationId, 1.08)
+		return
 	end
+
+	-- Temporary: disable custom melee clips from config because they conflict with current character rigs.
+	return
 end
 
 local function playWeaponReloadAnimation(weaponKey)
@@ -1255,7 +1744,39 @@ local function playWeaponReloadAnimation(weaponKey)
 		return
 	end
 
-	playAnimationById(weapon.ReloadAnimationId, 1)
+	return
+end
+
+local function fireRangedWeaponOnce(weaponKey, weapon)
+	local camera = Workspace.CurrentCamera
+	if not camera then
+		return false
+	end
+
+	local character = player.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	if not root or not root:IsA("BasePart") then
+		return false
+	end
+
+	local targetPosition = resolveRangedAimTargetPosition(camera, character, root, weapon)
+	local unitRay = mouse.UnitRay
+	local rayOrigin = unitRay and unitRay.Origin or camera.CFrame.Position
+	local rayDirection = unitRay and unitRay.Direction or (targetPosition - camera.CFrame.Position)
+	local direction = rayDirection
+	if direction.Magnitude < 0.01 then
+		direction = camera.CFrame.LookVector
+	end
+
+	playWeaponFireAnimation(weaponKey)
+	applyShotRecoil(weapon)
+	combatActionEvent:FireServer("fire", {
+		direction = direction,
+		targetPosition = targetPosition,
+		rayOrigin = rayOrigin,
+		rayDirection = rayDirection,
+	})
+	return true
 end
 
 local function bindCharacter(character)
@@ -1284,8 +1805,9 @@ local function bindCharacter(character)
 	end)
 end
 
-local mouse = player:GetMouse()
 mouse.Button1Down:Connect(function()
+	leftMouseHeld = true
+
 	if hasBlockingUiOpen() then
 		return
 	end
@@ -1296,32 +1818,35 @@ mouse.Button1Down:Connect(function()
 	end
 
 	if weapon.Category == "Ranged" then
-		local camera = Workspace.CurrentCamera
-		if not camera then
-			return
+		if fireRangedWeaponOnce(weaponKey, weapon) then
+			nextAutoFireAt = os.clock() + math.max(0.03, (weapon.FireCooldown or 0.1) * 0.85)
 		end
-
-		local direction
-		if aimModeEnabled then
-			local viewport = camera.ViewportSize
-			local centerRay = camera:ViewportPointToRay(viewport.X * 0.5, viewport.Y * 0.5)
-			direction = centerRay.Direction
-		else
-			local origin = camera.CFrame.Position
-			direction = mouse.Hit.Position - origin
-			if direction.Magnitude < 0.01 then
-				direction = camera.CFrame.LookVector
-			end
-		end
-
-		playWeaponFireAnimation(weaponKey)
-		combatActionEvent:FireServer("fire", {
-			direction = direction,
-		})
 	else
 		playWeaponFireAnimation(weaponKey)
-		combatActionEvent:FireServer("melee")
+		local payload = nil
+		local character = player.Character
+		local root = character and character:FindFirstChild("HumanoidRootPart")
+		if root and root:IsA("BasePart") then
+			local lockRoot = findNearestZombieRoot(root.Position, MELEE_AUTO_LOCK_DISTANCE)
+			if lockRoot then
+				local direction = Vector3.new(
+					lockRoot.Position.X - root.Position.X,
+					0,
+					lockRoot.Position.Z - root.Position.Z
+				)
+				if direction.Magnitude > 0.01 then
+					payload = {
+						direction = direction.Unit,
+					}
+				end
+			end
+		end
+		combatActionEvent:FireServer("melee", payload)
 	end
+end)
+
+mouse.Button1Up:Connect(function()
+	leftMouseHeld = false
 end)
 
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
@@ -1461,6 +1986,27 @@ combatStateEvent.OnClientEvent:Connect(function(data)
 	refreshCombatHud()
 end)
 
+combatFeedbackEvent.OnClientEvent:Connect(function(data)
+	if typeof(data) ~= "table" then
+		return
+	end
+
+	if data.type ~= "hit" then
+		return
+	end
+
+	local damage = math.max(1, math.floor(tonumber(data.damage) or 0))
+	local hitCount = math.max(1, math.floor(tonumber(data.hitCount) or 1))
+	local isMelee = tostring(data.category) == "Melee"
+
+	showHitMarker(hitCount)
+	playHitConfirm(hitCount, isMelee)
+
+	if typeof(data.worldPosition) == "Vector3" then
+		spawnDamageNumber(data.worldPosition, damage, hitCount, isMelee)
+	end
+end)
+
 shopEvent.OnClientEvent:Connect(function(data)
 	if typeof(data) ~= "table" then
 		return
@@ -1556,14 +2102,43 @@ player.CharacterRemoving:Connect(function(character)
 	clearAnimationCacheForCharacter(character)
 	setAimModeEnabled(false)
 	hideReviveButtons()
+	leftMouseHeld = false
 end)
 
 RunService.RenderStepped:Connect(function(deltaTime)
-	if spectatorModeEnabled and spectatorLookActive and not rightMouseHeld then
+	if hitMarkerTimer > 0 then
+		hitMarkerTimer = math.max(0, hitMarkerTimer - deltaTime)
+		if hitMarkerTimer <= 0 then
+			hitMarkerFrame.Visible = false
+		end
+	end
+
+	updateDamageNumbers(deltaTime)
+	updateRecoil(deltaTime)
+	updateGameplayFacing(deltaTime)
+	updateGameplayCursorState()
+
+	if leftMouseHeld and not spectatorModeEnabled and not hasBlockingUiOpen() and not isReloading then
+		local weaponKey, weapon = getCurrentWeapon()
+		if weaponKey and weapon and weapon.Category == "Ranged" then
+			local now = os.clock()
+			if now >= nextAutoFireAt then
+				if fireRangedWeaponOnce(weaponKey, weapon) then
+					nextAutoFireAt = now + math.max(0.03, (weapon.FireCooldown or 0.1) * 0.85)
+				else
+					nextAutoFireAt = now + 0.05
+				end
+			end
+		end
+	end
+
+	local rightPressed = UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2)
+
+	if spectatorModeEnabled and spectatorLookActive and not rightPressed then
 		setSpectatorLookActive(false)
 	end
 
-	if not spectatorModeEnabled and aimModeEnabled and not rightMouseHeld then
+	if not spectatorModeEnabled and aimModeEnabled and not rightPressed then
 		setAimModeEnabled(false)
 	end
 
