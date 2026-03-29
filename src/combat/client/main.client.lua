@@ -570,17 +570,17 @@ local RANGED_AIM_LOCK_DISTANCE = 10
 local LOOK_ROTATE_LERP_SPEED = 20
 local CURSOR_RAY_DISTANCE = 2000
 local AIM_MOTOR_LERP_SPEED = 14
-local AIM_PITCH_UP_LIMIT = math.rad(45)
-local AIM_PITCH_DOWN_LIMIT = math.rad(65)
-local AIM_YAW_LIMIT = math.rad(35)
-local HEAD_PITCH_FACTOR = 0.8
-local HEAD_YAW_FACTOR = 0.8
-local ARM_PITCH_FACTOR = 1.25
-local ARM_YAW_FACTOR = 0.75
-local WAIST_PITCH_FACTOR = 0.4
-local WAIST_YAW_FACTOR = 0.55
-local HIP_PITCH_FACTOR = 0.1
-local HIP_YAW_FACTOR = 0.16
+local AIM_PITCH_UP_LIMIT = math.rad(60)
+local AIM_PITCH_DOWN_LIMIT = math.rad(80)
+local AIM_YAW_LIMIT = math.rad(50)
+local CFRAME_IDENTITY = CFrame.new()
+local HEAD_PITCH_FACTOR = 1.0
+local HEAD_YAW_FACTOR = 1.0
+local RIGHT_ARM_IK_WEIGHT = 0.9
+local RIGHT_ARM_IK_MIN_REACH = 3.8
+local RIGHT_ARM_IK_MAX_REACH = 5.6
+local RIGHT_ARM_IK_MIN_Y_OFFSET = -0.85
+local RIGHT_ARM_IK_MAX_Y_OFFSET = 1.25
 local spectatorInput = {
 	forward = false,
 	back = false,
@@ -592,6 +592,103 @@ local spectatorInput = {
 	slow = false,
 }
 local aimRigByCharacter = setmetatable({}, { __mode = "k" })
+local aimIkByCharacter = setmetatable({}, { __mode = "k" })
+
+local function ensureRightArmAimIK(character)
+	local cached = aimIkByCharacter[character]
+	if cached and cached.ik and cached.ik.Parent and cached.targetPart and cached.targetPart.Parent then
+		return cached
+	end
+
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	local upperTorso = character:FindFirstChild("UpperTorso")
+	local rightUpperArm = character:FindFirstChild("RightUpperArm")
+	local rightHand = character:FindFirstChild("RightHand")
+	if not (humanoid and upperTorso and rightUpperArm and rightHand) then
+		return nil
+	end
+	if not (upperTorso:IsA("BasePart") and rightUpperArm:IsA("BasePart") and rightHand:IsA("BasePart")) then
+		return nil
+	end
+
+	local targetPart = Instance.new("Part")
+	targetPart.Name = "AimIKTarget"
+	targetPart.Size = Vector3.new(0.1, 0.1, 0.1)
+	targetPart.Transparency = 1
+	targetPart.Anchored = true
+	targetPart.CanCollide = false
+	targetPart.CanTouch = false
+	targetPart.CanQuery = false
+	targetPart.Parent = character
+
+	local targetAttachment = Instance.new("Attachment")
+	targetAttachment.Name = "AimIKTargetAttachment"
+	targetAttachment.Parent = targetPart
+
+	local ik = Instance.new("IKControl")
+	ik.Name = "RangedRightArmIK"
+	ik.Type = Enum.IKControlType.Position
+	ik.ChainRoot = upperTorso
+	ik.EndEffector = rightHand
+	ik.Target = targetAttachment
+	ik.SmoothTime = 0.05
+	ik.Weight = RIGHT_ARM_IK_WEIGHT
+	ik.Enabled = false
+	ik.Parent = humanoid
+
+	local state = {
+		ik = ik,
+		targetPart = targetPart,
+		targetAttachment = targetAttachment,
+		rightUpperArm = rightUpperArm,
+	}
+	aimIkByCharacter[character] = state
+	return state
+end
+
+local function updateRightArmAimIK(character, targetPosition, enabled)
+	local state = ensureRightArmAimIK(character)
+	if not state then
+		return
+	end
+
+	if not enabled or typeof(targetPosition) ~= "Vector3" then
+		state.ik.Enabled = false
+		return
+	end
+
+	local shoulderPosition = state.rightUpperArm.Position
+	local rawToTarget = targetPosition - shoulderPosition
+	local toTarget = Vector3.new(
+		rawToTarget.X,
+		math.clamp(rawToTarget.Y, RIGHT_ARM_IK_MIN_Y_OFFSET, RIGHT_ARM_IK_MAX_Y_OFFSET),
+		rawToTarget.Z
+	)
+	if toTarget.Magnitude < 0.001 then
+		state.ik.Enabled = false
+		return
+	end
+
+	local armReach = math.clamp(toTarget.Magnitude * 0.55, RIGHT_ARM_IK_MIN_REACH, RIGHT_ARM_IK_MAX_REACH)
+	local ikTargetPosition = shoulderPosition + toTarget.Unit * armReach
+	state.targetPart.CFrame = CFrame.new(ikTargetPosition)
+	state.ik.Enabled = true
+end
+
+local function cleanupRightArmAimIK(character)
+	local state = aimIkByCharacter[character]
+	if not state then
+		return
+	end
+
+	if state.ik and state.ik.Parent then
+		state.ik:Destroy()
+	end
+	if state.targetPart and state.targetPart.Parent then
+		state.targetPart:Destroy()
+	end
+	aimIkByCharacter[character] = nil
+end
 
 local function hasBlockingUiOpen()
 	return shopFrame.Visible or skillsFrame.Visible or reviveButtonsFrame.Visible
@@ -653,11 +750,18 @@ local function getMouseViewportPosition()
 	return Vector2.new(math.max(0, mouse.X), math.max(0, mouse.Y))
 end
 
-local function getCursorWorldPosition(camera, ignoreCharacter, maxDistance)
-	local distance = math.max(1, tonumber(maxDistance) or CURSOR_RAY_DISTANCE)
+local function getMouseAimRay(camera)
 	local unitRay = mouse.UnitRay
 	local rayOrigin = unitRay and unitRay.Origin or camera.CFrame.Position
 	local rayDirection = unitRay and unitRay.Direction or camera.CFrame.LookVector
+	if rayDirection.Magnitude < 0.001 then
+		rayDirection = camera.CFrame.LookVector
+	end
+	return rayOrigin, rayDirection.Unit
+end
+
+local function getRaycastAimPoint(rayOrigin, rayDirection, ignoreCharacter, maxDistance)
+	local distance = math.max(1, tonumber(maxDistance) or CURSOR_RAY_DISTANCE)
 	local rayParams = RaycastParams.new()
 	rayParams.FilterType = Enum.RaycastFilterType.Blacklist
 	rayParams.FilterDescendantsInstances = ignoreCharacter and { ignoreCharacter } or {}
@@ -670,11 +774,14 @@ local function getCursorWorldPosition(camera, ignoreCharacter, maxDistance)
 	return rayOrigin + rayDirection * distance
 end
 
-local function resolveRangedAimTargetPosition(camera, character, root, weapon)
+local function resolveRangedAimData(camera, character, root, weapon)
 	if aimModeEnabled then
 		local lockRoot = findNearestZombieRoot(root.Position, RANGED_AIM_LOCK_DISTANCE)
 		if lockRoot then
-			return lockRoot.Position + Vector3.new(0, 1.2, 0)
+			local targetPosition = lockRoot.Position + Vector3.new(0, 1.2, 0)
+			local toTarget = targetPosition - camera.CFrame.Position
+			local direction = toTarget.Magnitude > 0.001 and toTarget.Unit or camera.CFrame.LookVector
+			return targetPosition, direction, camera.CFrame.Position
 		end
 	end
 
@@ -683,7 +790,9 @@ local function resolveRangedAimTargetPosition(camera, character, root, weapon)
 		aimDistance = math.max(weapon.Range, 50)
 	end
 
-	return getCursorWorldPosition(camera, character, aimDistance)
+	local rayOrigin, rayDirection = getMouseAimRay(camera)
+	local targetPosition = getRaycastAimPoint(rayOrigin, rayDirection, character, aimDistance)
+	return targetPosition, rayDirection, rayOrigin
 end
 
 local function rotateRootTowards(root, targetPosition, deltaTime)
@@ -710,6 +819,24 @@ local function rotateRootTowards(root, targetPosition, deltaTime)
 	root.CFrame = CFrame.lookAt(root.Position, root.Position + lookDirection)
 end
 
+local function findAimAttachment(part, attachmentName)
+	if not (part and part:IsA("BasePart")) then
+		return nil
+	end
+
+	local attachment = part:FindFirstChild(attachmentName)
+	if not (attachment and attachment:IsA("Attachment")) then
+		return nil
+	end
+
+	local jointRotation = attachment:FindFirstChild("JointRotation")
+	if jointRotation and jointRotation:IsA("Attachment") then
+		return jointRotation
+	end
+
+	return attachment
+end
+
 local function resolveAimRig(character)
 	local cached = aimRigByCharacter[character]
 	if cached then
@@ -726,6 +853,18 @@ local function resolveAimRig(character)
 			hasAny = true
 		elseif cached.leftHip and cached.leftHip.Parent then
 			hasAny = true
+		elseif cached.neckAttachment and cached.neckAttachment.Parent then
+			hasAny = true
+		elseif cached.rightShoulderAttachment and cached.rightShoulderAttachment.Parent then
+			hasAny = true
+		elseif cached.leftShoulderAttachment and cached.leftShoulderAttachment.Parent then
+			hasAny = true
+		elseif cached.waistAttachment and cached.waistAttachment.Parent then
+			hasAny = true
+		elseif cached.rightHipAttachment and cached.rightHipAttachment.Parent then
+			hasAny = true
+		elseif cached.leftHipAttachment and cached.leftHipAttachment.Parent then
+			hasAny = true
 		end
 		if hasAny then
 			return cached
@@ -740,6 +879,15 @@ local function resolveAimRig(character)
 		rightHip = nil,
 		leftHip = nil,
 		baseC0 = {},
+		neckAttachment = nil,
+		rightShoulderAttachment = nil,
+		leftShoulderAttachment = nil,
+		rightShoulderAttachmentPart1 = nil,
+		leftShoulderAttachmentPart1 = nil,
+		waistAttachment = nil,
+		rightHipAttachment = nil,
+		leftHipAttachment = nil,
+		baseAttachmentCFrame = {},
 	}
 
 	for _, desc in ipairs(character:GetDescendants()) do
@@ -779,45 +927,122 @@ local function resolveAimRig(character)
 		rig.baseC0.leftHip = rig.leftHip.C0
 	end
 
+	local upperTorso = character:FindFirstChild("UpperTorso")
+	local lowerTorso = character:FindFirstChild("LowerTorso")
+	local rightUpperArm = character:FindFirstChild("RightUpperArm")
+	local leftUpperArm = character:FindFirstChild("LeftUpperArm")
+	rig.neckAttachment = findAimAttachment(upperTorso, "NeckRigAttachment")
+	rig.rightShoulderAttachment = findAimAttachment(upperTorso, "RightShoulderRigAttachment")
+	rig.leftShoulderAttachment = findAimAttachment(upperTorso, "LeftShoulderRigAttachment")
+	rig.rightShoulderAttachmentPart1 = findAimAttachment(rightUpperArm, "RightShoulderRigAttachment")
+	rig.leftShoulderAttachmentPart1 = findAimAttachment(leftUpperArm, "LeftShoulderRigAttachment")
+	rig.waistAttachment = findAimAttachment(upperTorso, "WaistRigAttachment")
+	rig.rightHipAttachment = findAimAttachment(lowerTorso, "RightHipRigAttachment")
+	rig.leftHipAttachment = findAimAttachment(lowerTorso, "LeftHipRigAttachment")
+
+	if rig.neckAttachment then
+		rig.baseAttachmentCFrame.neck = rig.neckAttachment.CFrame
+	end
+	if rig.rightShoulderAttachment then
+		rig.baseAttachmentCFrame.rightShoulder = rig.rightShoulderAttachment.CFrame
+	end
+	if rig.leftShoulderAttachment then
+		rig.baseAttachmentCFrame.leftShoulder = rig.leftShoulderAttachment.CFrame
+	end
+	if rig.rightShoulderAttachmentPart1 then
+		rig.baseAttachmentCFrame.rightShoulderPart1 = rig.rightShoulderAttachmentPart1.CFrame
+	end
+	if rig.leftShoulderAttachmentPart1 then
+		rig.baseAttachmentCFrame.leftShoulderPart1 = rig.leftShoulderAttachmentPart1.CFrame
+	end
+	if rig.waistAttachment then
+		rig.baseAttachmentCFrame.waist = rig.waistAttachment.CFrame
+	end
+	if rig.rightHipAttachment then
+		rig.baseAttachmentCFrame.rightHip = rig.rightHipAttachment.CFrame
+	end
+	if rig.leftHipAttachment then
+		rig.baseAttachmentCFrame.leftHip = rig.leftHipAttachment.CFrame
+	end
+
 	aimRigByCharacter[character] = rig
 	return rig
 end
 
-local function lerpMotorC0(motor, baseC0, targetOffset, alpha)
+local function lerpMotorTransform(motor, targetOffset, alpha)
 	if not motor then
 		return
 	end
 
-	local referenceC0 = baseC0 or motor.C0
-	local offset = targetOffset or CFrame.identity
-	local targetC0 = referenceC0 * offset
-	motor.C0 = motor.C0:Lerp(targetC0, alpha)
+	local offset = targetOffset or CFRAME_IDENTITY
+	motor.Transform = motor.Transform:Lerp(offset, alpha)
+end
+
+local function lerpAttachmentCFrame(attachment, baseCFrame, targetOffset, alpha)
+	if not (attachment and baseCFrame) then
+		return
+	end
+
+	local offset = targetOffset or CFRAME_IDENTITY
+	local target = baseCFrame * offset
+	attachment.CFrame = attachment.CFrame:Lerp(target, alpha)
 end
 
 local function resetAimRig(character, deltaTime)
 	local rig = resolveAimRig(character)
 	local alpha = math.clamp(deltaTime * AIM_MOTOR_LERP_SPEED, 0, 1)
-	lerpMotorC0(rig.neck, rig.baseC0.neck, CFrame.identity, alpha)
-	lerpMotorC0(rig.rightShoulder, rig.baseC0.rightShoulder, CFrame.identity, alpha)
-	lerpMotorC0(rig.leftShoulder, rig.baseC0.leftShoulder, CFrame.identity, alpha)
-	lerpMotorC0(rig.waist, rig.baseC0.waist, CFrame.identity, alpha)
-	lerpMotorC0(rig.rightHip, rig.baseC0.rightHip, CFrame.identity, alpha)
-	lerpMotorC0(rig.leftHip, rig.baseC0.leftHip, CFrame.identity, alpha)
+	lerpMotorTransform(rig.neck, CFRAME_IDENTITY, alpha)
+	lerpMotorTransform(rig.rightShoulder, CFRAME_IDENTITY, alpha)
+	lerpMotorTransform(rig.leftShoulder, CFRAME_IDENTITY, alpha)
+	lerpMotorTransform(rig.waist, CFRAME_IDENTITY, alpha)
+	lerpMotorTransform(rig.rightHip, CFRAME_IDENTITY, alpha)
+	lerpMotorTransform(rig.leftHip, CFRAME_IDENTITY, alpha)
+	lerpAttachmentCFrame(rig.neckAttachment, rig.baseAttachmentCFrame.neck, CFRAME_IDENTITY, alpha)
+	lerpAttachmentCFrame(
+		rig.rightShoulderAttachment,
+		rig.baseAttachmentCFrame.rightShoulder,
+		CFRAME_IDENTITY,
+		alpha
+	)
+	lerpAttachmentCFrame(rig.leftShoulderAttachment, rig.baseAttachmentCFrame.leftShoulder, CFRAME_IDENTITY, alpha)
+	lerpAttachmentCFrame(
+		rig.rightShoulderAttachmentPart1,
+		rig.baseAttachmentCFrame.rightShoulderPart1,
+		CFRAME_IDENTITY,
+		alpha
+	)
+	lerpAttachmentCFrame(
+		rig.leftShoulderAttachmentPart1,
+		rig.baseAttachmentCFrame.leftShoulderPart1,
+		CFRAME_IDENTITY,
+		alpha
+	)
+	lerpAttachmentCFrame(rig.waistAttachment, rig.baseAttachmentCFrame.waist, CFRAME_IDENTITY, alpha)
+	lerpAttachmentCFrame(rig.rightHipAttachment, rig.baseAttachmentCFrame.rightHip, CFRAME_IDENTITY, alpha)
+	lerpAttachmentCFrame(rig.leftHipAttachment, rig.baseAttachmentCFrame.leftHip, CFRAME_IDENTITY, alpha)
 end
 
-local function updateAimRig(character, root, targetPosition, deltaTime)
+local function updateAimRig(character, root, targetPosition, aimDirection, deltaTime)
 	local rig = resolveAimRig(character)
 	if not rig then
 		return
 	end
 
-	local toTarget = targetPosition - root.Position
-	if toTarget.Magnitude < 0.001 then
+	local worldDirection = nil
+	local aimOrigin = root.Position + Vector3.new(0, 1.5, 0)
+	local toTarget = targetPosition - aimOrigin
+	if toTarget.Magnitude > 0.001 then
+		worldDirection = toTarget.Unit
+	elseif typeof(aimDirection) == "Vector3" and aimDirection.Magnitude > 0.001 then
+		worldDirection = aimDirection.Unit
+	end
+
+	if not worldDirection then
 		resetAimRig(character, deltaTime)
 		return
 	end
 
-	local localDirection = root.CFrame:VectorToObjectSpace(toTarget.Unit)
+	local localDirection = root.CFrame:VectorToObjectSpace(worldDirection)
 	local horizontalMag = math.sqrt(localDirection.X * localDirection.X + localDirection.Z * localDirection.Z)
 	if horizontalMag < 0.001 then
 		horizontalMag = 0.001
@@ -828,22 +1053,49 @@ local function updateAimRig(character, root, targetPosition, deltaTime)
 	local pitch = math.clamp(-pitchUp, -AIM_PITCH_UP_LIMIT, AIM_PITCH_DOWN_LIMIT)
 	local yaw = math.clamp(yawRight, -AIM_YAW_LIMIT, AIM_YAW_LIMIT)
 
-	local headTarget = CFrame.Angles(pitch * HEAD_PITCH_FACTOR, yaw * HEAD_YAW_FACTOR, 0)
-	local armTarget = CFrame.Angles(pitch * ARM_PITCH_FACTOR, yaw * ARM_YAW_FACTOR, 0)
-	local waistTarget = CFrame.Angles(pitch * WAIST_PITCH_FACTOR, yaw * WAIST_YAW_FACTOR, 0)
-	local hipsTarget = CFrame.Angles(-pitch * HIP_PITCH_FACTOR, -yaw * HIP_YAW_FACTOR, 0)
+	-- Constraint rigs often use opposite pitch orientation for neck vs shoulders.
+	local headTarget = CFrame.Angles(-pitch * HEAD_PITCH_FACTOR, yaw * HEAD_YAW_FACTOR, 0)
+	local rightArmTarget = CFRAME_IDENTITY
+	local rightArmTargetOpposite = CFRAME_IDENTITY
+	local leftArmTarget = CFRAME_IDENTITY
+	local leftArmTargetOpposite = CFRAME_IDENTITY
+	-- Keep aiming upper-body only: no torso/hip leaning from cursor pitch.
+	local waistTarget = CFRAME_IDENTITY
+	local hipsTarget = CFRAME_IDENTITY
 	local alpha = math.clamp(deltaTime * AIM_MOTOR_LERP_SPEED, 0, 1)
 
-	lerpMotorC0(rig.neck, rig.baseC0.neck, headTarget, alpha)
-	lerpMotorC0(rig.rightShoulder, rig.baseC0.rightShoulder, armTarget, alpha)
-	lerpMotorC0(rig.leftShoulder, rig.baseC0.leftShoulder, armTarget, alpha)
-	lerpMotorC0(rig.waist, rig.baseC0.waist, waistTarget, alpha)
-	lerpMotorC0(rig.rightHip, rig.baseC0.rightHip, hipsTarget, alpha)
-	lerpMotorC0(rig.leftHip, rig.baseC0.leftHip, hipsTarget, alpha)
+	lerpMotorTransform(rig.neck, headTarget, alpha)
+	lerpMotorTransform(rig.rightShoulder, rightArmTarget, alpha)
+	lerpMotorTransform(rig.leftShoulder, leftArmTarget, alpha)
+	lerpMotorTransform(rig.waist, waistTarget, alpha)
+	lerpMotorTransform(rig.rightHip, hipsTarget, alpha)
+	lerpMotorTransform(rig.leftHip, hipsTarget, alpha)
+	lerpAttachmentCFrame(rig.neckAttachment, rig.baseAttachmentCFrame.neck, headTarget, alpha)
+	lerpAttachmentCFrame(rig.rightShoulderAttachment, rig.baseAttachmentCFrame.rightShoulder, rightArmTarget, alpha)
+	lerpAttachmentCFrame(rig.leftShoulderAttachment, rig.baseAttachmentCFrame.leftShoulder, leftArmTarget, alpha)
+	lerpAttachmentCFrame(
+		rig.rightShoulderAttachmentPart1,
+		rig.baseAttachmentCFrame.rightShoulderPart1,
+		rightArmTargetOpposite,
+		alpha
+	)
+	lerpAttachmentCFrame(
+		rig.leftShoulderAttachmentPart1,
+		rig.baseAttachmentCFrame.leftShoulderPart1,
+		leftArmTargetOpposite,
+		alpha
+	)
+	lerpAttachmentCFrame(rig.waistAttachment, rig.baseAttachmentCFrame.waist, waistTarget, alpha)
+	lerpAttachmentCFrame(rig.rightHipAttachment, rig.baseAttachmentCFrame.rightHip, hipsTarget, alpha)
+	lerpAttachmentCFrame(rig.leftHipAttachment, rig.baseAttachmentCFrame.leftHip, hipsTarget, alpha)
 end
 
 local function updateGameplayFacing(deltaTime)
 	if spectatorModeEnabled then
+		local spectatorCharacter = player.Character
+		if spectatorCharacter then
+			updateRightArmAimIK(spectatorCharacter, nil, false)
+		end
 		return
 	end
 
@@ -867,32 +1119,47 @@ local function updateGameplayFacing(deltaTime)
 	end
 
 	if blockingUi then
+		if character then
+			updateRightArmAimIK(character, nil, false)
+		end
 		return
 	end
 
 	if not weaponKey or not weapon or not root or not root:IsA("BasePart") then
+		if character then
+			updateRightArmAimIK(character, nil, false)
+		end
 		return
 	end
 
 	if weapon.Category == "Ranged" and not camera then
+		updateRightArmAimIK(character, nil, false)
 		return
 	end
 
 	local targetPosition = nil
+	local aimDirection = nil
 	if weapon.Category == "Ranged" then
-		targetPosition = resolveRangedAimTargetPosition(camera, character, root, weapon)
+		targetPosition, aimDirection = resolveRangedAimData(camera, character, root, weapon)
 	elseif weapon.Category == "Melee" and meleeLockRoot then
 		targetPosition = meleeLockRoot.Position + Vector3.new(0, 1.2, 0)
 	end
 
 	if targetPosition then
 		rotateRootTowards(root, targetPosition, deltaTime)
+	elseif weapon.Category == "Ranged" and aimDirection then
+		local planarAim = Vector3.new(aimDirection.X, 0, aimDirection.Z)
+		if planarAim.Magnitude > 0.001 then
+			rotateRootTowards(root, root.Position + planarAim.Unit * 20, deltaTime)
+		end
 	end
 
 	if weapon.Category == "Ranged" and targetPosition then
-		updateAimRig(character, root, targetPosition, deltaTime)
+		updateAimRig(character, root, targetPosition, aimDirection, deltaTime)
+		updateRightArmAimIK(character, targetPosition, true)
 	else
 		resetAimRig(character, deltaTime)
+		updateRightArmAimIK(character, nil, false)
 	end
 end
 
@@ -1759,13 +2026,11 @@ local function fireRangedWeaponOnce(weaponKey, weapon)
 		return false
 	end
 
-	local targetPosition = resolveRangedAimTargetPosition(camera, character, root, weapon)
-	local unitRay = mouse.UnitRay
-	local rayOrigin = unitRay and unitRay.Origin or camera.CFrame.Position
-	local rayDirection = unitRay and unitRay.Direction or (targetPosition - camera.CFrame.Position)
+	local targetPosition, rayDirection, rayOrigin = resolveRangedAimData(camera, character, root, weapon)
 	local direction = rayDirection
 	if direction.Magnitude < 0.01 then
 		direction = camera.CFrame.LookVector
+		rayDirection = direction
 	end
 
 	playWeaponFireAnimation(weaponKey)
@@ -1783,6 +2048,8 @@ local function bindCharacter(character)
 	setDownedSpectatorState(false)
 	setAimModeEnabled(false)
 	clearAnimationCacheForCharacter(character)
+	cleanupRightArmAimIK(character)
+	ensureRightArmAimIK(character)
 	setCurrentToolNameByCharacter(character)
 
 	local humanoid = character:FindFirstChildOfClass("Humanoid") or character:WaitForChild("Humanoid", 5)
@@ -2100,6 +2367,7 @@ end
 player.CharacterAdded:Connect(bindCharacter)
 player.CharacterRemoving:Connect(function(character)
 	clearAnimationCacheForCharacter(character)
+	cleanupRightArmAimIK(character)
 	setAimModeEnabled(false)
 	hideReviveButtons()
 	leftMouseHeld = false

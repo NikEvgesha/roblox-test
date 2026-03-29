@@ -14,11 +14,11 @@ local COMBAT_FEEDBACK_EVENT_NAME = "CombatFeedback"
 local SHOP_EVENT_NAME = "ShopEvent"
 
 local KILL_TAG_LIFETIME = 8
-local TRACER_SPEED = 980
-local TRACER_MIN_TRAVEL_TIME = 0.03
-local TRACER_MAX_TRAVEL_TIME = 0.16
-local TRACER_SEGMENT_LENGTH = 7.5
-local TRACER_MUZZLE_OFFSET = 0.35
+local TRACER_SPEED = 740
+local TRACER_MIN_TRAVEL_TIME = 0.045
+local TRACER_MAX_TRAVEL_TIME = 0.22
+local TRACER_SEGMENT_LENGTH = 10
+local TRACER_MUZZLE_OFFSET = 0.45
 
 local weaponsByKey = combatConfig.Weapons
 local metaProgressionConfig = combatConfig.MetaProgression or {}
@@ -914,23 +914,23 @@ local function makeTracer(origin, hitPosition, shotDirection)
 	beam.Attachment1 = headAttachment
 	beam.FaceCamera = true
 	beam.LightEmission = 1
-	beam.Brightness = 2.6
-	beam.Width0 = 0.14
-	beam.Width1 = 0.08
-	beam.Color = ColorSequence.new(Color3.fromRGB(255, 228, 125), Color3.fromRGB(255, 208, 95))
+	beam.Brightness = 4.8
+	beam.Width0 = 0.22
+	beam.Width1 = 0.14
+	beam.Color = ColorSequence.new(Color3.fromRGB(255, 244, 188), Color3.fromRGB(255, 216, 118))
 	beam.Transparency = NumberSequence.new({
-		NumberSequenceKeypoint.new(0, 0.55),
-		NumberSequenceKeypoint.new(0.2, 0.24),
-		NumberSequenceKeypoint.new(0.4, 0.06),
-		NumberSequenceKeypoint.new(0.66, 0.18),
-		NumberSequenceKeypoint.new(0.86, 0.38),
-		NumberSequenceKeypoint.new(1, 0.72),
+		NumberSequenceKeypoint.new(0, 0.25),
+		NumberSequenceKeypoint.new(0.2, 0.08),
+		NumberSequenceKeypoint.new(0.45, 0),
+		NumberSequenceKeypoint.new(0.72, 0.08),
+		NumberSequenceKeypoint.new(0.9, 0.22),
+		NumberSequenceKeypoint.new(1, 0.45),
 	})
 	beam.Parent = tailPart
 
-	local segmentLength = math.clamp(distance * 0.18, 4, TRACER_SEGMENT_LENGTH)
+	local segmentLength = math.clamp(distance * 0.22, 5.5, TRACER_SEGMENT_LENGTH)
 	local travelTime = math.clamp(distance / TRACER_SPEED, TRACER_MIN_TRAVEL_TIME, TRACER_MAX_TRAVEL_TIME)
-	local cleanupAfter = travelTime + 0.12
+	local cleanupAfter = travelTime + 0.18
 	Debris:AddItem(tailPart, cleanupAfter)
 	Debris:AddItem(headPart, cleanupAfter)
 
@@ -1097,6 +1097,9 @@ local function handleFire(player, payload)
 
 	local pellets = math.max(1, weapon.Pellets or 1)
 	local spreadDegrees = 0
+	if pellets > 1 then
+		spreadDegrees = math.max(0, tonumber(weapon.SpreadDegrees) or 0)
+	end
 	local damageMultiplier = getRangedDamageMultiplier(player)
 	local totalDamage = 0
 	local hitCount = 0
