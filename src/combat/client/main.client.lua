@@ -601,13 +601,13 @@ local function ensureRightArmAimIK(character)
 	end
 
 	local humanoid = character:FindFirstChildOfClass("Humanoid")
-	local upperTorso = character:FindFirstChild("UpperTorso")
+	local rootPart = character:FindFirstChild("HumanoidRootPart")
 	local rightUpperArm = character:FindFirstChild("RightUpperArm")
 	local rightHand = character:FindFirstChild("RightHand")
-	if not (humanoid and upperTorso and rightUpperArm and rightHand) then
+	if not (humanoid and rightUpperArm and rightHand) then
 		return nil
 	end
-	if not (upperTorso:IsA("BasePart") and rightUpperArm:IsA("BasePart") and rightHand:IsA("BasePart")) then
+	if not (rightUpperArm:IsA("BasePart") and rightHand:IsA("BasePart")) then
 		return nil
 	end
 
@@ -625,12 +625,27 @@ local function ensureRightArmAimIK(character)
 	targetAttachment.Name = "AimIKTargetAttachment"
 	targetAttachment.Parent = targetPart
 
+	local polePart = Instance.new("Part")
+	polePart.Name = "AimIKPole"
+	polePart.Size = Vector3.new(0.1, 0.1, 0.1)
+	polePart.Transparency = 1
+	polePart.Anchored = true
+	polePart.CanCollide = false
+	polePart.CanTouch = false
+	polePart.CanQuery = false
+	polePart.Parent = character
+
+	local poleAttachment = Instance.new("Attachment")
+	poleAttachment.Name = "AimIKPoleAttachment"
+	poleAttachment.Parent = polePart
+
 	local ik = Instance.new("IKControl")
 	ik.Name = "RangedRightArmIK"
 	ik.Type = Enum.IKControlType.Position
-	ik.ChainRoot = upperTorso
+	ik.ChainRoot = rightUpperArm
 	ik.EndEffector = rightHand
 	ik.Target = targetAttachment
+	ik.Pole = poleAttachment
 	ik.SmoothTime = 0.05
 	ik.Weight = RIGHT_ARM_IK_WEIGHT
 	ik.Enabled = false
@@ -640,7 +655,10 @@ local function ensureRightArmAimIK(character)
 		ik = ik,
 		targetPart = targetPart,
 		targetAttachment = targetAttachment,
+		polePart = polePart,
+		poleAttachment = poleAttachment,
 		rightUpperArm = rightUpperArm,
+		rootPart = rootPart,
 	}
 	aimIkByCharacter[character] = state
 	return state
@@ -672,6 +690,10 @@ local function updateRightArmAimIK(character, targetPosition, enabled)
 	local armReach = math.clamp(toTarget.Magnitude * 0.55, RIGHT_ARM_IK_MIN_REACH, RIGHT_ARM_IK_MAX_REACH)
 	local ikTargetPosition = shoulderPosition + toTarget.Unit * armReach
 	state.targetPart.CFrame = CFrame.new(ikTargetPosition)
+
+	local basis = state.rootPart and state.rootPart.CFrame or state.rightUpperArm.CFrame
+	local polePosition = shoulderPosition + basis.RightVector * 1.35 - basis.UpVector * 0.55 - basis.LookVector * 0.25
+	state.polePart.CFrame = CFrame.new(polePosition)
 	state.ik.Enabled = true
 end
 
@@ -686,6 +708,9 @@ local function cleanupRightArmAimIK(character)
 	end
 	if state.targetPart and state.targetPart.Parent then
 		state.targetPart:Destroy()
+	end
+	if state.polePart and state.polePart.Parent then
+		state.polePart:Destroy()
 	end
 	aimIkByCharacter[character] = nil
 end
