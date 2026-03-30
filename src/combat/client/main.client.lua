@@ -576,11 +576,15 @@ local AIM_YAW_LIMIT = math.rad(50)
 local CFRAME_IDENTITY = CFrame.new()
 local HEAD_PITCH_FACTOR = 1.0
 local HEAD_YAW_FACTOR = 1.0
-local RIGHT_ARM_IK_WEIGHT = 0.9
-local RIGHT_ARM_IK_MIN_REACH = 3.8
-local RIGHT_ARM_IK_MAX_REACH = 5.6
-local RIGHT_ARM_IK_MIN_Y_OFFSET = -0.85
-local RIGHT_ARM_IK_MAX_Y_OFFSET = 1.25
+local RIGHT_ARM_IK = {
+	WEIGHT = 1.0,
+	MIN_REACH = 2.2,
+	MAX_REACH = 6.2,
+	SMOOTH_TIME = 0.08,
+	POLE_RIGHT = 1.45,
+	POLE_UP = 0.35,
+	POLE_BACK = 0.45,
+}
 local spectatorInput = {
 	forward = false,
 	back = false,
@@ -646,8 +650,8 @@ local function ensureRightArmAimIK(character)
 	ik.EndEffector = rightHand
 	ik.Target = targetAttachment
 	ik.Pole = poleAttachment
-	ik.SmoothTime = 0.05
-	ik.Weight = RIGHT_ARM_IK_WEIGHT
+	ik.SmoothTime = RIGHT_ARM_IK.SMOOTH_TIME
+	ik.Weight = RIGHT_ARM_IK.WEIGHT
 	ik.Enabled = false
 	ik.Parent = humanoid
 
@@ -676,23 +680,21 @@ local function updateRightArmAimIK(character, targetPosition, enabled)
 	end
 
 	local shoulderPosition = state.rightUpperArm.Position
-	local rawToTarget = targetPosition - shoulderPosition
-	local toTarget = Vector3.new(
-		rawToTarget.X,
-		math.clamp(rawToTarget.Y, RIGHT_ARM_IK_MIN_Y_OFFSET, RIGHT_ARM_IK_MAX_Y_OFFSET),
-		rawToTarget.Z
-	)
+	local toTarget = targetPosition - shoulderPosition
 	if toTarget.Magnitude < 0.001 then
 		state.ik.Enabled = false
 		return
 	end
 
-	local armReach = math.clamp(toTarget.Magnitude * 0.55, RIGHT_ARM_IK_MIN_REACH, RIGHT_ARM_IK_MAX_REACH)
+	local armReach = math.clamp(toTarget.Magnitude, RIGHT_ARM_IK.MIN_REACH, RIGHT_ARM_IK.MAX_REACH)
 	local ikTargetPosition = shoulderPosition + toTarget.Unit * armReach
 	state.targetPart.CFrame = CFrame.new(ikTargetPosition)
 
 	local basis = state.rootPart and state.rootPart.CFrame or state.rightUpperArm.CFrame
-	local polePosition = shoulderPosition + basis.RightVector * 1.35 - basis.UpVector * 0.55 - basis.LookVector * 0.25
+	local polePosition = shoulderPosition
+		+ basis.RightVector * RIGHT_ARM_IK.POLE_RIGHT
+		+ basis.UpVector * RIGHT_ARM_IK.POLE_UP
+		- basis.LookVector * RIGHT_ARM_IK.POLE_BACK
 	state.polePart.CFrame = CFrame.new(polePosition)
 	state.ik.Enabled = true
 end
@@ -1017,34 +1019,7 @@ local function resetAimRig(character, deltaTime)
 	local rig = resolveAimRig(character)
 	local alpha = math.clamp(deltaTime * AIM_MOTOR_LERP_SPEED, 0, 1)
 	lerpMotorTransform(rig.neck, CFRAME_IDENTITY, alpha)
-	lerpMotorTransform(rig.rightShoulder, CFRAME_IDENTITY, alpha)
-	lerpMotorTransform(rig.leftShoulder, CFRAME_IDENTITY, alpha)
-	lerpMotorTransform(rig.waist, CFRAME_IDENTITY, alpha)
-	lerpMotorTransform(rig.rightHip, CFRAME_IDENTITY, alpha)
-	lerpMotorTransform(rig.leftHip, CFRAME_IDENTITY, alpha)
 	lerpAttachmentCFrame(rig.neckAttachment, rig.baseAttachmentCFrame.neck, CFRAME_IDENTITY, alpha)
-	lerpAttachmentCFrame(
-		rig.rightShoulderAttachment,
-		rig.baseAttachmentCFrame.rightShoulder,
-		CFRAME_IDENTITY,
-		alpha
-	)
-	lerpAttachmentCFrame(rig.leftShoulderAttachment, rig.baseAttachmentCFrame.leftShoulder, CFRAME_IDENTITY, alpha)
-	lerpAttachmentCFrame(
-		rig.rightShoulderAttachmentPart1,
-		rig.baseAttachmentCFrame.rightShoulderPart1,
-		CFRAME_IDENTITY,
-		alpha
-	)
-	lerpAttachmentCFrame(
-		rig.leftShoulderAttachmentPart1,
-		rig.baseAttachmentCFrame.leftShoulderPart1,
-		CFRAME_IDENTITY,
-		alpha
-	)
-	lerpAttachmentCFrame(rig.waistAttachment, rig.baseAttachmentCFrame.waist, CFRAME_IDENTITY, alpha)
-	lerpAttachmentCFrame(rig.rightHipAttachment, rig.baseAttachmentCFrame.rightHip, CFRAME_IDENTITY, alpha)
-	lerpAttachmentCFrame(rig.leftHipAttachment, rig.baseAttachmentCFrame.leftHip, CFRAME_IDENTITY, alpha)
 end
 
 local function updateAimRig(character, root, targetPosition, aimDirection, deltaTime)
@@ -1078,41 +1053,11 @@ local function updateAimRig(character, root, targetPosition, aimDirection, delta
 	local pitch = math.clamp(-pitchUp, -AIM_PITCH_UP_LIMIT, AIM_PITCH_DOWN_LIMIT)
 	local yaw = math.clamp(yawRight, -AIM_YAW_LIMIT, AIM_YAW_LIMIT)
 
-	-- Constraint rigs often use opposite pitch orientation for neck vs shoulders.
 	local headTarget = CFrame.Angles(-pitch * HEAD_PITCH_FACTOR, yaw * HEAD_YAW_FACTOR, 0)
-	local rightArmTarget = CFRAME_IDENTITY
-	local rightArmTargetOpposite = CFRAME_IDENTITY
-	local leftArmTarget = CFRAME_IDENTITY
-	local leftArmTargetOpposite = CFRAME_IDENTITY
-	-- Keep aiming upper-body only: no torso/hip leaning from cursor pitch.
-	local waistTarget = CFRAME_IDENTITY
-	local hipsTarget = CFRAME_IDENTITY
 	local alpha = math.clamp(deltaTime * AIM_MOTOR_LERP_SPEED, 0, 1)
 
 	lerpMotorTransform(rig.neck, headTarget, alpha)
-	lerpMotorTransform(rig.rightShoulder, rightArmTarget, alpha)
-	lerpMotorTransform(rig.leftShoulder, leftArmTarget, alpha)
-	lerpMotorTransform(rig.waist, waistTarget, alpha)
-	lerpMotorTransform(rig.rightHip, hipsTarget, alpha)
-	lerpMotorTransform(rig.leftHip, hipsTarget, alpha)
 	lerpAttachmentCFrame(rig.neckAttachment, rig.baseAttachmentCFrame.neck, headTarget, alpha)
-	lerpAttachmentCFrame(rig.rightShoulderAttachment, rig.baseAttachmentCFrame.rightShoulder, rightArmTarget, alpha)
-	lerpAttachmentCFrame(rig.leftShoulderAttachment, rig.baseAttachmentCFrame.leftShoulder, leftArmTarget, alpha)
-	lerpAttachmentCFrame(
-		rig.rightShoulderAttachmentPart1,
-		rig.baseAttachmentCFrame.rightShoulderPart1,
-		rightArmTargetOpposite,
-		alpha
-	)
-	lerpAttachmentCFrame(
-		rig.leftShoulderAttachmentPart1,
-		rig.baseAttachmentCFrame.leftShoulderPart1,
-		leftArmTargetOpposite,
-		alpha
-	)
-	lerpAttachmentCFrame(rig.waistAttachment, rig.baseAttachmentCFrame.waist, waistTarget, alpha)
-	lerpAttachmentCFrame(rig.rightHipAttachment, rig.baseAttachmentCFrame.rightHip, hipsTarget, alpha)
-	lerpAttachmentCFrame(rig.leftHipAttachment, rig.baseAttachmentCFrame.leftHip, hipsTarget, alpha)
 end
 
 local function updateGameplayFacing(deltaTime)
@@ -2023,11 +1968,24 @@ local function playWeaponFireAnimation(weaponKey)
 	end
 
 	if weapon.Category == "Ranged" then
+		playAnimationById(weapon.FireAnimationId, weapon.FireAnimationSpeed or 1)
 		return
 	end
 
-	-- Temporary: disable custom melee clips from config because they conflict with current character rigs.
-	return
+	if weapon.Category ~= "Melee" then
+		return
+	end
+
+	local primary = weapon.SwingAnimationId
+	local alternate = weapon.SwingAltAnimationId
+	local animationId = primary
+	if type(alternate) == "string" and alternate ~= "" and math.random() < 0.5 then
+		animationId = alternate
+	end
+	if type(animationId) ~= "string" or animationId == "" then
+		animationId = alternate
+	end
+	playAnimationById(animationId, weapon.SwingAnimationSpeed or 1)
 end
 
 local function playWeaponReloadAnimation(weaponKey)

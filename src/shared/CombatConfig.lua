@@ -545,7 +545,7 @@ return {
 			Range = 7,
 			SwingAnimationId = "rbxassetid://522635514",
 			SwingAltAnimationId = "rbxassetid://522638767",
-			SwingSoundId = "rbxasset://sounds/swordlunge.wav",
+			SwingSoundId = "rbxasset://sounds/swordslash.wav",
 		},
 	},
 }
