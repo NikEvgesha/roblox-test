@@ -1112,10 +1112,25 @@ local function handleFire(player, payload)
 	end
 
 	local targetPosition = payload.targetPosition
+	local targetDistance = nil
 	if typeof(targetPosition) == "Vector3" then
 		local fromOrigin = targetPosition - damageOrigin
 		if fromOrigin.Magnitude > 0.01 then
 			unitDirection = fromOrigin.Unit
+			targetDistance = fromOrigin.Magnitude
+		end
+	end
+
+	local pellets = math.max(1, weapon.Pellets or 1)
+	if pellets > 1 then
+		-- For shotgun-like weapons, apply damage traces from muzzle to reduce near-range parallax misses.
+		damageOrigin = tracerOrigin
+		if typeof(targetPosition) == "Vector3" then
+			local muzzleToTarget = targetPosition - damageOrigin
+			if muzzleToTarget.Magnitude > 0.01 then
+				unitDirection = muzzleToTarget.Unit
+				targetDistance = muzzleToTarget.Magnitude
+			end
 		end
 	end
 
@@ -1132,10 +1147,13 @@ local function handleFire(player, payload)
 		end)
 	end
 
-	local pellets = math.max(1, weapon.Pellets or 1)
 	local spreadDegrees = 0
 	if pellets > 1 then
 		spreadDegrees = math.max(0, tonumber(weapon.SpreadDegrees) or 0)
+		if targetDistance then
+			local closeRangeSpreadFactor = math.clamp(targetDistance / 28, 0.18, 1)
+			spreadDegrees *= closeRangeSpreadFactor
+		end
 	end
 	local damageMultiplier = getRangedDamageMultiplier(player)
 	local totalDamage = 0

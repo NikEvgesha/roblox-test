@@ -460,7 +460,7 @@ return {
 			FireAnimationId = "",
 			ReloadAnimationId = "",
 			ShotSoundId = "rbxassetid://174295284",
-			ShotSoundVolume = 0.2,
+			ShotSoundVolume = 0.12,
 			ShotSoundPlaybackSpeed = 1.0,
 			ReloadSoundId = "",
 		},
