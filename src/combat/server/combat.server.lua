@@ -163,6 +163,25 @@ local function getMeleeDamageMultiplier(player)
 	return 1 + runLevel * perLevel + metaBonus
 end
 
+local function getMeleeAttackSpeedMultiplier(player, weapon)
+	local base = tonumber(weapon and weapon.AttackSpeedMultiplier) or 1
+	local speedSkillConfig = combatConfig.Progression and combatConfig.Progression.Skills
+		and combatConfig.Progression.Skills.Speed
+		or nil
+	local speedMetaConfig = metaUpgradeConfig.Speed or {}
+	local speedSkillLevel = getProgressionLevel(player, "SpeedLevel")
+	local speedMetaLevel = getMetaUpgradeLevel(player, "Speed")
+	local fromRun = speedSkillLevel * (tonumber(speedSkillConfig and speedSkillConfig.MeleeAttackSpeedPerLevel) or 0)
+	local fromMeta = speedMetaLevel * (tonumber(speedMetaConfig.MeleeAttackSpeedPerLevel) or 0)
+	return math.max(0.25, base + fromRun + fromMeta)
+end
+
+local function getEffectiveMeleeCooldown(player, weapon)
+	local cooldown = tonumber(weapon and weapon.Cooldown) or 0.75
+	local speedMultiplier = getMeleeAttackSpeedMultiplier(player, weapon)
+	return math.max(0.2, cooldown / speedMultiplier)
+end
+
 local function ensureStat(parent, name, className, defaultValue)
 	local item = parent:FindFirstChild(name)
 	if item and item.ClassName == className then
@@ -349,8 +368,11 @@ local function sanitizeTemplateTool(tool, weaponKey, weapon)
 			reloadSoundId = detectedReloadSoundId or ""
 		end
 
-		createSound(handle, "ShotSound", shotSoundId, 0.9)
+		local shotSoundVolume = math.clamp(tonumber(weapon.ShotSoundVolume) or 0.6, 0, 2)
+		local boltSoundVolume = math.clamp(tonumber(weapon.BoltSoundVolume) or 0.6, 0, 2)
+		createSound(handle, "ShotSound", shotSoundId, shotSoundVolume)
 		createSound(handle, "ReloadSound", reloadSoundId, 0.8)
+		createSound(handle, "BoltSound", weapon.BoltSoundId, boltSoundVolume)
 	else
 		createSound(handle, "SwingSound", weapon.SwingSoundId, 0.9)
 	end
@@ -433,8 +455,11 @@ local function buildFallbackWeaponTool(weaponKey)
 		muzzle.Position = getMuzzleLocalOffset(tool, handle, 0.2)
 		muzzle.Parent = handle
 
-		createSound(handle, "ShotSound", weapon.ShotSoundId, 0.9)
+		local shotSoundVolume = math.clamp(tonumber(weapon.ShotSoundVolume) or 0.6, 0, 2)
+		local boltSoundVolume = math.clamp(tonumber(weapon.BoltSoundVolume) or 0.6, 0, 2)
+		createSound(handle, "ShotSound", weapon.ShotSoundId, shotSoundVolume)
 		createSound(handle, "ReloadSound", weapon.ReloadSoundId, 0.8)
+		createSound(handle, "BoltSound", weapon.BoltSoundId, boltSoundVolume)
 	else
 		createSound(handle, "SwingSound", weapon.SwingSoundId, 0.9)
 	end
@@ -705,7 +730,7 @@ local function applyClassLoadout(player, playerState, classKey)
 	player:SetAttribute("SelectedClass", normalizedClass)
 end
 
-local function playHandleSound(player, weaponKey, soundName)
+local function playHandleSound(player, weaponKey, soundName, playbackSpeed)
 	local character = player.Character
 	if not character then
 		return
@@ -730,6 +755,11 @@ local function playHandleSound(player, weaponKey, soundName)
 	if sound and sound:IsA("Sound") then
 		if tostring(sound.SoundId) == "" then
 			return
+		end
+		if typeof(playbackSpeed) == "number" then
+			sound.PlaybackSpeed = math.clamp(playbackSpeed, 0.65, 2.25)
+		else
+			sound.PlaybackSpeed = 1
 		end
 		sound:Play()
 	end
@@ -1093,7 +1123,14 @@ local function handleFire(player, payload)
 	ammoState.mag -= 1
 	sendCombatState(player)
 	makeMuzzleFlash(tracerOrigin, unitDirection)
-	playHandleSound(player, weaponKey, "ShotSound")
+	playHandleSound(player, weaponKey, "ShotSound", tonumber(weapon.ShotSoundPlaybackSpeed) or 1)
+	if type(weapon.BoltSoundId) == "string" and weapon.BoltSoundId ~= "" then
+		local boltDelay = math.max(0, tonumber(weapon.BoltSoundDelay) or 0.15)
+		local boltPlaybackSpeed = tonumber(weapon.BoltSoundPlaybackSpeed) or 1
+		task.delay(boltDelay, function()
+			playHandleSound(player, weaponKey, "BoltSound", boltPlaybackSpeed)
+		end)
+	end
 
 	local pellets = math.max(1, weapon.Pellets or 1)
 	local spreadDegrees = 0
@@ -1203,12 +1240,13 @@ local function handleMeleeSwing(player, payload)
 		return
 	end
 
-	if os.clock() - playerState.lastMeleeAt < weapon.Cooldown then
+	local meleeCooldown = getEffectiveMeleeCooldown(player, weapon)
+	if os.clock() - playerState.lastMeleeAt < meleeCooldown then
 		return
 	end
 
 	playerState.lastMeleeAt = os.clock()
-	playHandleSound(player, weaponKey, "SwingSound")
+	playHandleSound(player, weaponKey, "SwingSound", (tonumber(weapon.Cooldown) or 0.75) / meleeCooldown)
 
 	local character = player.Character
 	if not character then

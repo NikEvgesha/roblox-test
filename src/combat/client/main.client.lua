@@ -1908,17 +1908,17 @@ end
 
 local function playAnimationById(animationId, speed)
 	if type(animationId) ~= "string" or animationId == "" then
-		return
+		return nil
 	end
 
 	local character = player.Character
 	if not character then
-		return
+		return nil
 	end
 
 	local humanoid = character:FindFirstChildOfClass("Humanoid")
 	if not humanoid then
-		return
+		return nil
 	end
 
 	local tracks = animationTracksByHumanoid[humanoid]
@@ -1936,7 +1936,7 @@ local function playAnimationById(animationId, speed)
 		end)
 		animation:Destroy()
 		if not ok or not loadedTrack then
-			return
+			return nil
 		end
 
 		track = loadedTrack
@@ -1952,6 +1952,7 @@ local function playAnimationById(animationId, speed)
 	track.Priority = Enum.AnimationPriority.Action
 	track:Play(0.05, 1, speed or 1)
 	track:AdjustSpeed(speed or 1)
+	return track
 end
 
 local function clearAnimationCacheForCharacter(character)
@@ -1961,7 +1962,7 @@ local function clearAnimationCacheForCharacter(character)
 	end
 end
 
-local function playWeaponFireAnimation(weaponKey)
+local function playWeaponFireAnimation(weaponKey, meleeCooldown)
 	local weapon = combatConfig.Weapons[weaponKey]
 	if not weapon then
 		return
@@ -1976,16 +1977,30 @@ local function playWeaponFireAnimation(weaponKey)
 		return
 	end
 
-	local primary = weapon.SwingAnimationId
-	local alternate = weapon.SwingAltAnimationId
-	local animationId = primary
-	if type(alternate) == "string" and alternate ~= "" and math.random() < 0.5 then
-		animationId = alternate
-	end
+	local animationId = weapon.SwingAnimationId
 	if type(animationId) ~= "string" or animationId == "" then
-		animationId = alternate
+		animationId = weapon.SwingAltAnimationId
 	end
-	playAnimationById(animationId, weapon.SwingAnimationSpeed or 1)
+	local baseSpeed = weapon.SwingAnimationSpeed or 1
+	local targetCooldown = math.max(0.2, tonumber(meleeCooldown) or tonumber(weapon.Cooldown) or 0.75)
+	local track = playAnimationById(animationId, 1)
+	if track then
+		local trackLength = tonumber(track.Length) or 0
+		if trackLength > 0.01 then
+			local targetDuration = math.max(0.16, targetCooldown * 0.9)
+			local speedScale = math.clamp(trackLength / targetDuration, 0.35, 3.5)
+			track:AdjustSpeed(baseSpeed * speedScale)
+		else
+			track:AdjustSpeed(baseSpeed)
+		end
+
+		local stopAfter = math.max(0.12, math.min(targetCooldown, targetCooldown * 0.95))
+		task.delay(stopAfter, function()
+			if track and track.IsPlaying then
+				track:Stop(0.08)
+			end
+		end)
+	end
 end
 
 local function playWeaponReloadAnimation(weaponKey)
@@ -2072,7 +2087,34 @@ mouse.Button1Down:Connect(function()
 			nextAutoFireAt = os.clock() + math.max(0.03, (weapon.FireCooldown or 0.1) * 0.85)
 		end
 	else
-		playWeaponFireAnimation(weaponKey)
+		local now = os.clock()
+		local progressionFolder = player:FindFirstChild("Progression")
+		local metaProgressionFolder = player:FindFirstChild("MetaProgression")
+		local speedSkillStat = progressionFolder and progressionFolder:FindFirstChild("SpeedLevel") or nil
+		local speedMetaStat = metaProgressionFolder and metaProgressionFolder:FindFirstChild("Speed") or nil
+		local speedSkillLevel = speedSkillStat and speedSkillStat:IsA("IntValue") and math.max(0, speedSkillStat.Value) or 0
+		local speedMetaLevel = speedMetaStat and speedMetaStat:IsA("IntValue") and math.max(0, speedMetaStat.Value) or 0
+		local speedSkillConfig = combatConfig.Progression and combatConfig.Progression.Skills
+			and combatConfig.Progression.Skills.Speed
+			or nil
+		local speedMetaConfig = combatConfig.MetaProgression
+			and combatConfig.MetaProgression.Upgrades
+			and combatConfig.MetaProgression.Upgrades.Speed
+			or nil
+		local attackSpeedMultiplier = math.max(
+			0.25,
+			(tonumber(weapon.AttackSpeedMultiplier) or 1)
+				+ speedSkillLevel * (tonumber(speedSkillConfig and speedSkillConfig.MeleeAttackSpeedPerLevel) or 0)
+				+ speedMetaLevel * (tonumber(speedMetaConfig and speedMetaConfig.MeleeAttackSpeedPerLevel) or 0)
+		)
+		local meleeCooldown = math.max(0.2, (tonumber(weapon.Cooldown) or 0.75) / attackSpeedMultiplier)
+		local nextMeleeAt = tonumber(player:GetAttribute("ClientNextMeleeAt")) or 0
+		if now < nextMeleeAt then
+			return
+		end
+		player:SetAttribute("ClientNextMeleeAt", now + meleeCooldown)
+
+		playWeaponFireAnimation(weaponKey, meleeCooldown)
 		local payload = nil
 		local character = player.Character
 		local root = character and character:FindFirstChild("HumanoidRootPart")
