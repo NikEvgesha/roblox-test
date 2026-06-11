@@ -335,6 +335,57 @@ local function trackConnection(player, connection)
 	table.insert(connectionsByPlayer[player], connection)
 end
 
+local function ensureFolder(parent, name)
+	local folder = parent:FindFirstChild(name)
+	if folder and folder:IsA("Folder") then
+		return folder
+	end
+
+	folder = Instance.new("Folder")
+	folder.Name = name
+	folder.Parent = parent
+	return folder
+end
+
+local function ensureIntValue(parent, name, defaultValue)
+	local value = parent:FindFirstChild(name)
+	if value and value:IsA("IntValue") then
+		return value
+	end
+
+	value = Instance.new("IntValue")
+	value.Name = name
+	value.Value = defaultValue
+	value.Parent = parent
+	return value
+end
+
+local function getSkillPointsValue(player, createIfMissing)
+	local progression = player:FindFirstChild("Progression")
+	if not progression and createIfMissing then
+		progression = ensureFolder(player, "Progression")
+	end
+	if not progression then
+		return nil
+	end
+
+	if createIfMissing then
+		return ensureIntValue(progression, "SkillPoints", 0)
+	end
+
+	local value = progression:FindFirstChild("SkillPoints")
+	if value and value:IsA("IntValue") then
+		return value
+	end
+
+	return nil
+end
+
+local function getSkillPoints(player)
+	local value = getSkillPointsValue(player, false)
+	return value and math.max(0, value.Value) or 0
+end
+
 local function resolveProfessionKey(player)
 	local attributeValue = player:GetAttribute("SelectedClass")
 	if type(attributeValue) == "string" and attributeValue ~= "" then
@@ -350,12 +401,21 @@ local function resolveProfessionKey(player)
 	return abilityConfig.DefaultProfession
 end
 
-local function buildUnlockedAbilities(profession)
-	local unlocked = {}
+local function buildInitialAbilityRanks(profession)
+	local ranks = {}
 	for _, abilityKey in ipairs(profession.AbilityOrder or {}) do
-		unlocked[abilityKey] = true
+		local ability = profession.Abilities and profession.Abilities[abilityKey]
+		ranks[abilityKey] = math.max(0, math.floor(tonumber(ability and ability.StartRank) or 0))
 	end
-	return unlocked
+	return ranks
+end
+
+local function getAbilityRank(state, abilityKey)
+	return math.max(0, math.floor(tonumber(state.abilityRanks[abilityKey]) or 0))
+end
+
+local function isAbilityUnlocked(state, abilityKey)
+	return getAbilityRank(state, abilityKey) > 0
 end
 
 local function createState(player, professionKey)
@@ -372,8 +432,7 @@ local function createState(player, professionKey)
 		resource = startResource,
 		maxResource = maxResource,
 		stanceKey = abilityConfig.GetDefaultStance(normalizedKey),
-		unlockedAbilities = buildUnlockedAbilities(profession),
-		abilityRanks = {},
+		abilityRanks = buildInitialAbilityRanks(profession),
 		cooldowns = {},
 		auraEnabled = {},
 		shield = 0,
@@ -464,6 +523,8 @@ local function buildAbilityPayload(state, profession)
 	for _, abilityKey in ipairs(profession.AbilityOrder or {}) do
 		local ability = profession.Abilities and profession.Abilities[abilityKey]
 		if ability then
+			local rank = getAbilityRank(state, abilityKey)
+			local maxRank = math.max(1, math.floor(tonumber(ability.MaxRank) or 1))
 			table.insert(abilities, {
 				key = abilityKey,
 				displayName = ability.DisplayName or abilityKey,
@@ -473,8 +534,11 @@ local function buildAbilityPayload(state, profession)
 				costPerSecond = ability.CostPerSecond,
 				cooldown = ability.Cooldown or 0,
 				cooldownRemaining = getCooldownRemaining(state, abilityKey),
-				unlocked = state.unlockedAbilities[abilityKey] == true,
-				rank = state.abilityRanks[abilityKey] or 0,
+				unlocked = rank > 0,
+				rank = rank,
+				maxRank = maxRank,
+				upgradeCost = math.max(1, math.floor(tonumber(ability.UpgradeCost) or 1)),
+				canUpgrade = rank < maxRank,
 				active = state.auraEnabled[abilityKey] == true,
 			})
 		end
@@ -514,6 +578,7 @@ local function buildStatePayload(state)
 		stanceKey = state.stanceKey,
 		stances = buildStancePayload(state, profession),
 		abilities = buildAbilityPayload(state, profession),
+		skillPoints = getSkillPoints(state.player),
 		shield = state.shield,
 		immortalRemaining = math.max(0, state.immortalUntil - os.clock()),
 		message = state.message or "",
@@ -600,10 +665,20 @@ end
 
 local function setupPlayer(player)
 	local state = getState(player)
+	local skillPointsValue = getSkillPointsValue(player, true)
 	player:SetAttribute("ProfessionKey", state.professionKey)
 	player:SetAttribute("ProfessionResourceName", state.resourceDisplayName)
 	player:SetAttribute("ProfessionStance", state.stanceKey)
 	equipStanceWeapon(player, state)
+
+	if skillPointsValue then
+		trackConnection(player, skillPointsValue:GetPropertyChangedSignal("Value"):Connect(function()
+			local currentState = getState(player)
+			currentState.dirty = true
+			currentState.nextSendAt = 0
+			sendState(player, true)
+		end))
+	end
 
 	trackConnection(player, player:GetAttributeChangedSignal("SelectedClass"):Connect(function()
 		setProfession(player, resolveProfessionKey(player))
@@ -646,6 +721,34 @@ local function setStance(player, stanceKey)
 	player:SetAttribute("ProfessionStance", stanceKey)
 	equipStanceWeapon(player, state)
 	setStateMessage(state, ("Stance: %s"):format(profession.Stances[stanceKey].DisplayName or stanceKey))
+end
+
+local function upgradeAbility(player, abilityKey)
+	local state = getState(player)
+	local profession = select(1, abilityConfig.GetProfession(state.professionKey))
+	local ability = profession.Abilities and profession.Abilities[abilityKey]
+	if not ability then
+		setStateMessage(state, "Unknown ability.")
+		return
+	end
+
+	local currentRank = getAbilityRank(state, abilityKey)
+	local maxRank = math.max(1, math.floor(tonumber(ability.MaxRank) or 1))
+	if currentRank >= maxRank then
+		setStateMessage(state, "Ability is already maxed.")
+		return
+	end
+
+	local cost = math.max(1, math.floor(tonumber(ability.UpgradeCost) or 1))
+	local points = getSkillPointsValue(player, true)
+	if not points or points.Value < cost then
+		setStateMessage(state, "Not enough skill points.")
+		return
+	end
+
+	points.Value -= cost
+	state.abilityRanks[abilityKey] = currentRank + 1
+	setStateMessage(state, ("Upgraded %s to rank %d."):format(ability.DisplayName or abilityKey, currentRank + 1))
 end
 
 local function executePiercingShot(player, ability, payload)
@@ -696,7 +799,9 @@ local function executePiercingShot(player, ability, payload)
 	local tracerOrigin = getRangedFireOrigin(player, weapon) or damageOrigin
 	local range = math.max(1, tonumber(ability.Range) or tonumber(weapon.Range) or 500)
 	local maxTargets = math.max(1, math.floor(tonumber(ability.MaxTargets) or 5))
-	local damageMultiplier = getRangedDamageMultiplier(player) * (tonumber(ability.DamageMultiplier) or 2.5)
+	local damageMultiplier = getRangedDamageMultiplier(player)
+		* AbilityService.GetRangedDamageMultiplier(player, weaponKey)
+		* (tonumber(ability.DamageMultiplier) or 2.5)
 	local damage = math.max(1, math.floor((tonumber(weapon.Damage) or 1) * damageMultiplier + 0.5))
 	local ignoreList = { character }
 	local hitModels = {}
@@ -863,7 +968,7 @@ local function useAbility(player, abilityKey, payload)
 	local state = getState(player)
 	local profession = select(1, abilityConfig.GetProfession(state.professionKey))
 	local ability = profession.Abilities and profession.Abilities[abilityKey]
-	if not ability or state.unlockedAbilities[abilityKey] ~= true then
+	if not ability or not isAbilityUnlocked(state, abilityKey) then
 		setStateMessage(state, "Ability is not unlocked.")
 		return
 	end
@@ -975,6 +1080,12 @@ local function handleClientAction(player, action, payload)
 
 	if action == "useAbility" then
 		useAbility(player, tostring(payload.abilityKey or ""), payload)
+		sendState(player, true)
+		return
+	end
+
+	if action == "upgradeAbility" then
+		upgradeAbility(player, tostring(payload.abilityKey or ""))
 		sendState(player, true)
 		return
 	end
@@ -1098,6 +1209,43 @@ function AbilityService.RegisterDamageDealt(player, amount)
 	addResource(state, (tonumber(amount) or 0) * gainPerDamage)
 	state.lastCombatAt = os.clock()
 	sendState(player, false)
+end
+
+function AbilityService.GetRangedDamageMultiplier(player, weaponKey)
+	local state = getState(player)
+	if state.professionKey ~= "Gunner" then
+		return 1
+	end
+
+	local profession = select(1, abilityConfig.GetProfession(state.professionKey))
+	local multiplier = 1
+
+	if weaponKey == "Pistol" then
+		local ability = profession.Abilities and profession.Abilities.PistolTraining
+		multiplier += getAbilityRank(state, "PistolTraining") * (tonumber(ability and ability.DamageMultiplierPerRank) or 0)
+	elseif weaponKey == "Rifle" then
+		local ability = profession.Abilities and profession.Abilities.RifleTraining
+		multiplier += getAbilityRank(state, "RifleTraining") * (tonumber(ability and ability.DamageMultiplierPerRank) or 0)
+	end
+
+	return math.max(0.1, multiplier)
+end
+
+function AbilityService.GetFireRateMultiplier(player, weaponKey)
+	local state = getState(player)
+	if state.professionKey ~= "Gunner" then
+		return 1
+	end
+
+	local weapon = weaponsByKey[weaponKey]
+	if not weapon or weapon.Category ~= "Ranged" then
+		return 1
+	end
+
+	local profession = select(1, abilityConfig.GetProfession(state.professionKey))
+	local ability = profession.Abilities and profession.Abilities.RapidHandling
+	local rank = getAbilityRank(state, "RapidHandling")
+	return math.max(0.1, 1 + rank * (tonumber(ability and ability.FireRateMultiplierPerRank) or 0))
 end
 
 function AbilityService.GetState(player)

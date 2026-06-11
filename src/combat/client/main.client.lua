@@ -534,6 +534,7 @@ local currentToolName = ""
 local ammoMag = 0
 local ammoReserve = 0
 local isReloading = false
+local currentFireRateMultiplier = 1
 local aimModeEnabled = false
 local currentHealth = 100
 local maxHealth = 100
@@ -2264,6 +2265,10 @@ combatStateEvent.OnClientEvent:Connect(function(data)
 		isReloading = data.reloading
 	end
 
+	if typeof(data.fireRateMultiplier) == "number" then
+		currentFireRateMultiplier = math.max(0.1, data.fireRateMultiplier)
+	end
+
 	if typeof(data.equippedToolName) == "string" then
 		currentToolName = data.equippedToolName
 	end
@@ -2417,7 +2422,7 @@ RunService.RenderStepped:Connect(function(deltaTime)
 			local now = os.clock()
 			if now >= nextAutoFireAt then
 				if fireRangedWeaponOnce(weaponKey, weapon) then
-					nextAutoFireAt = now + math.max(0.03, (weapon.FireCooldown or 0.1) * 0.85)
+					nextAutoFireAt = now + math.max(0.03, ((weapon.FireCooldown or 0.1) / currentFireRateMultiplier) * 0.85)
 				else
 					nextAutoFireAt = now + 0.05
 				end

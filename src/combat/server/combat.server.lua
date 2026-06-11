@@ -583,6 +583,7 @@ local function sendCombatState(player)
 		equippedToolName = equippedWeaponKey and weaponsByKey[equippedWeaponKey].ToolName or "",
 		mag = 0,
 		reserve = 0,
+		fireRateMultiplier = equippedWeaponKey and abilityService.GetFireRateMultiplier(player, equippedWeaponKey) or 1,
 	}
 
 	if equippedWeaponKey then
@@ -1063,7 +1064,9 @@ local function handleFire(player, payload)
 		return
 	end
 
-	if os.clock() - playerState.lastShotAt < weapon.FireCooldown then
+	local fireRateMultiplier = abilityService.GetFireRateMultiplier(player, weaponKey)
+	local effectiveFireCooldown = math.max(0.025, (tonumber(weapon.FireCooldown) or 0.1) / fireRateMultiplier)
+	if os.clock() - playerState.lastShotAt < effectiveFireCooldown then
 		return
 	end
 
@@ -1160,7 +1163,7 @@ local function handleFire(player, payload)
 			spreadDegrees *= closeRangeSpreadFactor
 		end
 	end
-	local damageMultiplier = getRangedDamageMultiplier(player)
+	local damageMultiplier = getRangedDamageMultiplier(player) * abilityService.GetRangedDamageMultiplier(player, weaponKey)
 	local totalDamage = 0
 	local hitCount = 0
 	local feedbackWorldPosition = nil
