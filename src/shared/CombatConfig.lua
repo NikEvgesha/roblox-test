@@ -92,9 +92,9 @@ return {
 	},
 
 	Zombies = {
-		LobbyPlaceId = 135533599453315,
+		LobbyPlaceId = 101936198553206,
 		DefaultDifficulty = "Medium",
-		TargetWaveCount = 100,
+		TargetWaveCount = 10,
 		IntermissionSeconds = 12,
 		BaseEnemiesPerWave = 8,
 		EnemiesPerWaveStep = 1,

@@ -192,6 +192,14 @@ Active skill numbers:
 | `Rage Heal` | all Rage | 15 sec | heals `0.6% max HP` per Rage; `100 Rage = 60% max HP` |
 | `Undying Rage` | all Rage | 60 sec | immortal for `5 sec`, HP cannot end below `1` |
 
+Implementation status 2026-06-11:
+
+- `AbilityConfig` contains rank data for Gunner and Guardian abilities.
+- `AbilityService` spends `Progression.SkillPoints` to upgrade ability ranks.
+- Gunner rank effects are wired into ranged damage and fire rate.
+- Guardian rank effects are wired into incoming damage reduction, melee damage, Rage scaling, shield size/duration, heal strength, and ultimate duration.
+- Combat minimap draft exists as `src/combat/client/minimap.client.lua`.
+
 ## Milestone 5 - Economy
 
 Цель: разделить временную и постоянную экономику.

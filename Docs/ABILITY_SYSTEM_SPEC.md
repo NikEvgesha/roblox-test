@@ -279,8 +279,17 @@ After that:
 4. Add `Grenade`, `RageHeal`, `UndyingRage`.
 5. Add `TestAura`.
 
+Current implementation status 2026-06-11:
+
+- First code slice is implemented.
+- `PiercingShot`, `Grenade`, `Shield`, `RageHeal`, `UndyingRage`, and `TestAura` are implemented enough for prototype testing.
+- Ability ranks are implemented in runtime state and upgraded through `Progression.SkillPoints`.
+- Gunner passives affect ranged weapon damage and fire rate.
+- Guardian passives affect incoming damage, melee damage, and damage scaling from current Rage.
+- Remaining cleanup: split the large combat and zombie scripts into smaller services after the cube loop is playable.
+
 ## Open Technical Questions
 
-1. Exact skill unlock/rank UI.
-2. Whether ability state stores only current run data or also tracks lobby unlocks.
-3. How much of `combat.server.lua` should be split into modules before implementation.
+1. Whether ability ranks remain run-only or later merge with lobby/meta progression.
+2. Exact final layout for the rank/ability UI.
+3. How much of `combat.server.lua` and `zombies.server.lua` should be split into modules after prototype validation.

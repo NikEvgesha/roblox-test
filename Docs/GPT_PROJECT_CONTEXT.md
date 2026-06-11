@@ -104,6 +104,10 @@ src/shared
 - Revive products config.
 - Spectator/free-fly draft.
 - Persistent profile store.
+- Ability runtime for `Gunner` and `Guardian`: resources, stance, active abilities, passives, ranks, skill point spending.
+- Gunner implemented: `Pistol/Rifle` stance, Rifle mana spend, `PiercingShot`, `Grenade`, pistol/rifle damage passives, fire rate passive.
+- Guardian implemented: Rage gain/decay, `Shield`, `RageHeal`, `UndyingRage`, `TestAura` toggle/drain, damage reduction, melee damage, damage per Rage.
+- Combat minimap draft: player-centered map with enemy red dots from `Workspace.Zombies`.
 
 Важно: часть docs и task board устарели. Актуальный дизайн теперь в `GDD_V2.md`.
 
