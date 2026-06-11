@@ -8,9 +8,9 @@ local playerGui = player:WaitForChild("PlayerGui")
 local queueEvent = ReplicatedStorage:WaitForChild(QUEUE_EVENT_NAME)
 
 local classState = {
-	classes = { "Assault", "Builder", "Healer", "Melee" },
+	classes = { "Gunner", "Guardian" },
 	classDisplayNames = {},
-	selectedClass = "Assault",
+	selectedClass = "Gunner",
 }
 
 local classButtons = {}
@@ -58,7 +58,7 @@ selectedLabel.Font = Enum.Font.Gotham
 selectedLabel.TextSize = 14
 selectedLabel.TextXAlignment = Enum.TextXAlignment.Left
 selectedLabel.TextColor3 = Color3.fromRGB(208, 208, 208)
-selectedLabel.Text = "Selected: Assault"
+selectedLabel.Text = "Selected: Gunner"
 selectedLabel.Parent = root
 
 local buttonsFrame = Instance.new("Frame")

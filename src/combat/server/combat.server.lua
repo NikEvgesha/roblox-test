@@ -7,6 +7,7 @@ local TweenService = game:GetService("TweenService")
 
 local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local combatConfig = require(sharedFolder:WaitForChild("CombatConfig"))
+local abilityService = require(script.Parent:WaitForChild("AbilityService"))
 
 local COMBAT_ACTION_EVENT_NAME = "CombatAction"
 local COMBAT_STATE_EVENT_NAME = "CombatState"
@@ -1097,6 +1098,10 @@ local function handleFire(player, payload)
 		return
 	end
 
+	if not abilityService.ConsumeWeaponUse(player, weaponKey) then
+		return
+	end
+
 	local damageOrigin = tracerOrigin
 	local rayOrigin = payload.rayOrigin
 	local rayDirection = payload.rayDirection
@@ -1172,6 +1177,7 @@ local function handleFire(player, payload)
 	end
 
 	if hitCount > 0 then
+		abilityService.RegisterDamageDealt(player, totalDamage)
 		combatFeedbackEvent:FireClient(player, {
 			type = "hit",
 			damage = totalDamage,
@@ -1324,6 +1330,7 @@ local function handleMeleeSwing(player, payload)
 	end
 
 	if hitCount > 0 then
+		abilityService.RegisterDamageDealt(player, totalDamage)
 		combatFeedbackEvent:FireClient(player, {
 			type = "hit",
 			damage = totalDamage,

@@ -38,23 +38,15 @@ return {
 	},
 
 	Classes = {
-		DefaultClass = "Assault",
-		Order = { "Assault", "Builder", "Healer", "Melee" },
+		DefaultClass = "Gunner",
+		Order = { "Gunner", "Guardian" },
 		Definitions = {
-			Assault = {
-				DisplayName = "Assault",
-				StarterWeapons = { "Rifle", "Bulava" },
+			Gunner = {
+				DisplayName = "Gunner",
+				StarterWeapons = { "Pistol", "Rifle" },
 			},
-			Builder = {
-				DisplayName = "Builder",
-				StarterWeapons = { "Shotgun" },
-			},
-			Healer = {
-				DisplayName = "Healer",
-				StarterWeapons = { "Bow" },
-			},
-			Melee = {
-				DisplayName = "Melee",
+			Guardian = {
+				DisplayName = "Guardian",
 				StarterWeapons = { "Bulava" },
 			},
 		},
