@@ -20,6 +20,8 @@ local currentState = {
 	stanceKey = "",
 	stances = {},
 	abilities = {},
+	shield = 0,
+	immortalRemaining = 0,
 	message = "",
 }
 
@@ -139,6 +141,20 @@ local function getAbilityByType(typeName, index)
 	return nil
 end
 
+local function formatAbilityHotkey(ability)
+	if not ability then
+		return "-"
+	end
+
+	local label = ability.displayName or ability.key or "-"
+	local cooldownRemaining = tonumber(ability.cooldownRemaining) or 0
+	if cooldownRemaining > 0.05 then
+		return ("%s %.0fs"):format(label, math.ceil(cooldownRemaining))
+	end
+
+	return label
+end
+
 local function render()
 	local maxResource = math.max(0, tonumber(currentState.maxResource) or 0)
 	local resource = math.clamp(tonumber(currentState.resource) or 0, 0, maxResource)
@@ -161,12 +177,28 @@ local function render()
 	local fAbility = getAbilityByType("Ultimate", 1) or getAbilityByType("Aura", 1)
 	hotkeyLabel.Text = ("%s | Q=%s | C=%s | F=%s"):format(
 		#stanceText > 0 and table.concat(stanceText, " / ") or "No stance",
-		qAbility and qAbility.displayName or "-",
-		cAbility and cAbility.displayName or "-",
-		fAbility and fAbility.displayName or "-"
+		formatAbilityHotkey(qAbility),
+		formatAbilityHotkey(cAbility),
+		formatAbilityHotkey(fAbility)
 	)
 
-	messageLabel.Text = currentState.message or ""
+	local statusParts = {}
+	local shield = tonumber(currentState.shield) or 0
+	local immortalRemaining = tonumber(currentState.immortalRemaining) or 0
+	if shield > 0.5 then
+		table.insert(statusParts, ("Shield %.0f"):format(shield))
+	end
+	if immortalRemaining > 0.05 then
+		table.insert(statusParts, ("Immortal %.0fs"):format(math.ceil(immortalRemaining)))
+	end
+
+	local message = currentState.message or ""
+	if #statusParts > 0 then
+		local statusText = table.concat(statusParts, " | ")
+		messageLabel.Text = message ~= "" and (message .. " | " .. statusText) or statusText
+	else
+		messageLabel.Text = message
+	end
 end
 
 local function setStanceByIndex(index)
