@@ -396,6 +396,23 @@ return {
 		DefaultAmmoAmount = 10,
 	},
 
+	OneTimeUpgrades = {
+		Enabled = true,
+		FolderName = "OneTimeUpgrades",
+		Upgrades = {
+			DamageShrine = {
+				DisplayName = "Damage Shrine",
+				PromptText = "Buy damage boost",
+				Cost = 250,
+				Position = { 36, 2, -24 },
+				Size = { 7, 5, 7 },
+				Color = { 255, 200, 90 },
+				RangedLevels = 1,
+				MeleeLevels = 1,
+			},
+		},
+	},
+
 	Debug = {
 		GrantAllWeaponsOnSpawn = true,
 	},
