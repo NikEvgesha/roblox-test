@@ -13,6 +13,7 @@ local AbilityService = {}
 local STATE_SEND_INTERVAL = 0.2
 local implementedAbilities = {
 	PiercingShot = true,
+	Grenade = true,
 	Shield = true,
 	RageHeal = true,
 	UndyingRage = true,
@@ -203,6 +204,58 @@ local function createPiercingTracer(origin, hitPosition)
 
 	Debris:AddItem(startPart, 0.16)
 	Debris:AddItem(endPart, 0.16)
+end
+
+local function createGrenadeVisual(position, radius, fuseTime)
+	if typeof(position) ~= "Vector3" then
+		return
+	end
+
+	local marker = Instance.new("Part")
+	marker.Name = "GrenadeMarker"
+	marker.Anchored = true
+	marker.CanCollide = false
+	marker.CanTouch = false
+	marker.CanQuery = false
+	marker.Shape = Enum.PartType.Ball
+	marker.Material = Enum.Material.Neon
+	marker.Color = Color3.fromRGB(255, 172, 74)
+	marker.Transparency = 0.15
+	marker.Size = Vector3.new(1.2, 1.2, 1.2)
+	marker.Position = position + Vector3.new(0, 0.8, 0)
+	marker.Parent = Workspace
+
+	local light = Instance.new("PointLight")
+	light.Color = marker.Color
+	light.Brightness = 2.4
+	light.Range = 10
+	light.Parent = marker
+
+	Debris:AddItem(marker, fuseTime + 0.2)
+
+	task.delay(fuseTime, function()
+		local explosion = Instance.new("Part")
+		explosion.Name = "GrenadeExplosion"
+		explosion.Anchored = true
+		explosion.CanCollide = false
+		explosion.CanTouch = false
+		explosion.CanQuery = false
+		explosion.Shape = Enum.PartType.Ball
+		explosion.Material = Enum.Material.Neon
+		explosion.Color = Color3.fromRGB(255, 126, 58)
+		explosion.Transparency = 0.45
+		explosion.Size = Vector3.new(radius * 2, radius * 2, radius * 2)
+		explosion.Position = position
+		explosion.Parent = Workspace
+
+		local explosionLight = Instance.new("PointLight")
+		explosionLight.Color = explosion.Color
+		explosionLight.Brightness = 4
+		explosionLight.Range = radius * 2
+		explosionLight.Parent = explosion
+
+		Debris:AddItem(explosion, 0.18)
+	end)
 end
 
 local function getRangedDamageMultiplier(player)
@@ -710,6 +763,102 @@ local function executePiercingShot(player, ability, payload)
 	return true, ("Piercing Shot: %d hits."):format(hitCount)
 end
 
+local function resolveAbilityTargetPosition(player, payload, maxRange)
+	local character = player.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	if not (root and root:IsA("BasePart")) then
+		return nil
+	end
+
+	local origin = root.Position + Vector3.new(0, 1.5, 0)
+	local targetPosition = typeof(payload) == "table" and payload.targetPosition or nil
+	local direction = typeof(payload) == "table" and payload.direction or nil
+
+	if typeof(targetPosition) ~= "Vector3" then
+		if typeof(direction) ~= "Vector3" or direction.Magnitude < 0.01 then
+			direction = root.CFrame.LookVector
+		end
+		targetPosition = origin + direction.Unit * math.max(1, maxRange)
+	end
+
+	local offset = targetPosition - origin
+	local distance = offset.Magnitude
+	if distance > maxRange then
+		targetPosition = origin + offset.Unit * maxRange
+	end
+
+	return targetPosition
+end
+
+local function applyAreaDamage(player, position, radius, damage)
+	local overlapParams = OverlapParams.new()
+	overlapParams.FilterType = Enum.RaycastFilterType.Blacklist
+	overlapParams.FilterDescendantsInstances = { player.Character }
+
+	local parts = Workspace:GetPartBoundsInRadius(position, radius, overlapParams)
+	local hitModels = {}
+	local totalDamage = 0
+	local hitCount = 0
+	local feedbackWorldPosition = nil
+
+	for _, part in ipairs(parts) do
+		local humanoid, model = findHumanoidFromPart(part)
+		if humanoid and model and not hitModels[model] and model ~= player.Character then
+			if not Players:GetPlayerFromCharacter(model) and humanoid.Health > 0 then
+				tagHumanoidDamageByPlayer(humanoid, player)
+				humanoid:TakeDamage(damage)
+				hitModels[model] = true
+				totalDamage += damage
+				hitCount += 1
+
+				local targetRoot = model:FindFirstChild("HumanoidRootPart")
+				if targetRoot and targetRoot:IsA("BasePart") then
+					feedbackWorldPosition = feedbackWorldPosition or targetRoot.Position
+				else
+					feedbackWorldPosition = feedbackWorldPosition or part.Position
+				end
+			end
+		end
+	end
+
+	if hitCount > 0 then
+		AbilityService.RegisterDamageDealt(player, totalDamage)
+		if combatFeedbackEvent then
+			combatFeedbackEvent:FireClient(player, {
+				type = "hit",
+				damage = totalDamage,
+				hitCount = hitCount,
+				category = "Ranged",
+				worldPosition = feedbackWorldPosition,
+			})
+		end
+	end
+
+	return totalDamage, hitCount
+end
+
+local function executeGrenade(player, ability, payload)
+	local radius = math.max(1, tonumber(ability.Radius) or 12)
+	local damage = math.max(1, math.floor(tonumber(ability.Damage) or 120))
+	local fuseTime = math.max(0, tonumber(ability.FuseTime) or 0.8)
+	local maxRange = math.max(1, tonumber(ability.Range) or 120)
+	local targetPosition = resolveAbilityTargetPosition(player, payload, maxRange)
+	if not targetPosition then
+		return false, "Character is not ready."
+	end
+
+	createGrenadeVisual(targetPosition, radius, fuseTime)
+
+	task.delay(fuseTime, function()
+		if player.Parent ~= Players then
+			return
+		end
+		applyAreaDamage(player, targetPosition, radius, damage)
+	end)
+
+	return true, "Grenade thrown."
+end
+
 local function useAbility(player, abilityKey, payload)
 	local state = getState(player)
 	local profession = select(1, abilityConfig.GetProfession(state.professionKey))
@@ -756,6 +905,19 @@ local function useAbility(player, abilityKey, payload)
 	local successMessage = nil
 	if abilityKey == "PiercingShot" then
 		local ok, message = executePiercingShot(player, ability, payload)
+		if not ok then
+			if cost == "All" then
+				state.resource = spentResource
+			else
+				state.resource = math.min(state.maxResource, state.resource + spentResource)
+			end
+			state.dirty = true
+			setStateMessage(state, message)
+			return
+		end
+		successMessage = message
+	elseif abilityKey == "Grenade" then
+		local ok, message = executeGrenade(player, ability, payload)
 		if not ok then
 			if cost == "All" then
 				state.resource = spentResource
