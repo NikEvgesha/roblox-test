@@ -187,6 +187,7 @@ local function updateMinimap()
 		if enemy:IsA("Model") then
 			local enemyRoot = getEnemyRoot(enemy)
 			if enemyRoot then
+				local isBoss = enemy:GetAttribute("IsBossZombie") == true
 				local offset = enemyRoot.Position - characterRoot.Position
 				local planar = Vector3.new(offset.X, 0, offset.Z)
 				local mapX = planar:Dot(right) / MAP_RADIUS_STUDS
@@ -199,6 +200,15 @@ local function updateMinimap()
 				end
 
 				local dot = enemyDots[dotIndex]
+				if isBoss then
+					dot.Size = UDim2.fromOffset(11, 11)
+					dot.BackgroundColor3 = Color3.fromRGB(255, 163, 58)
+					dot.ZIndex = 4
+				else
+					dot.Size = UDim2.fromOffset(DOT_SIZE, DOT_SIZE)
+					dot.BackgroundColor3 = Color3.fromRGB(236, 76, 76)
+					dot.ZIndex = 3
+				end
 				dot.Position = UDim2.fromOffset(halfSize + mapX * halfSize * 0.88, halfSize - mapY * halfSize * 0.88)
 				dot.BackgroundTransparency = distance > 1 and 0.25 or 0
 				dot.Visible = true

@@ -1487,6 +1487,8 @@ local function createZombie(position, variantKey, stage)
 	end
 
 	zombie.Parent = zombiesFolder
+	zombie:SetAttribute("IsBossZombie", variant.IsBoss == true)
+
 	if not animationTracks then
 		animationTracks = buildZombieAnimationTracks(zombie, humanoid)
 	end
