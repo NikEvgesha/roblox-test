@@ -1,18 +1,31 @@
 local Players = game:GetService("Players")
+local Debris = game:GetService("Debris")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
 
 local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local abilityConfig = require(sharedFolder:WaitForChild("AbilityConfig"))
+local combatConfig = require(sharedFolder:WaitForChild("CombatConfig"))
 
 local AbilityService = {}
 
 local STATE_SEND_INTERVAL = 0.2
 local implementedAbilities = {
+	PiercingShot = true,
 	Shield = true,
 	RageHeal = true,
 	UndyingRage = true,
 }
+
+local combatFeedbackEvent = nil
+local weaponsByKey = combatConfig.Weapons or {}
+local toolNameToWeaponKey = {}
+for weaponKey, weapon in pairs(weaponsByKey) do
+	if type(weapon.ToolName) == "string" then
+		toolNameToWeaponKey[weapon.ToolName] = weaponKey
+	end
+end
 
 local abilityEvent = nil
 local started = false
@@ -29,6 +42,225 @@ local function ensureRemoteEvent(name)
 	event.Name = name
 	event.Parent = ReplicatedStorage
 	return event
+end
+
+local function getWeaponKeyFromTool(tool)
+	if not tool or not tool:IsA("Tool") then
+		return nil
+	end
+
+	local byAttribute = tool:GetAttribute("WeaponKey")
+	if type(byAttribute) == "string" and weaponsByKey[byAttribute] then
+		return byAttribute
+	end
+
+	return toolNameToWeaponKey[tool.Name]
+end
+
+local function getEquippedWeaponKey(player)
+	local character = player.Character
+	if not character then
+		return nil
+	end
+
+	for _, child in ipairs(character:GetChildren()) do
+		if child:IsA("Tool") then
+			local weaponKey = getWeaponKeyFromTool(child)
+			if weaponKey then
+				return weaponKey
+			end
+		end
+	end
+
+	return nil
+end
+
+local function getEquippedToolAndHandle(player, weapon)
+	local character = player.Character
+	if not character or not weapon then
+		return nil, nil
+	end
+
+	local tool = character:FindFirstChild(weapon.ToolName)
+	if not tool or not tool:IsA("Tool") then
+		return nil, nil
+	end
+
+	local handle = tool:FindFirstChild("Handle")
+	if handle and handle:IsA("BasePart") then
+		return tool, handle
+	end
+
+	return tool, nil
+end
+
+local function getRangedFireOrigin(player, weapon)
+	local _, handle = getEquippedToolAndHandle(player, weapon)
+	if handle then
+		local muzzle = handle:FindFirstChild("Muzzle")
+		if muzzle and muzzle:IsA("Attachment") then
+			return muzzle.WorldPosition
+		end
+
+		return handle.Position
+	end
+
+	local character = player.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	if root and root:IsA("BasePart") then
+		return root.Position + Vector3.new(0, 1.5, 0)
+	end
+
+	return nil
+end
+
+local function findHumanoidFromPart(part)
+	if not part then
+		return nil
+	end
+
+	local model = part:FindFirstAncestorOfClass("Model")
+	if not model then
+		return nil
+	end
+
+	return model:FindFirstChildOfClass("Humanoid"), model
+end
+
+local function tagHumanoidDamageByPlayer(humanoid, player)
+	if not humanoid or not player then
+		return
+	end
+
+	humanoid:SetAttribute("LastHitByUserId", player.UserId)
+	humanoid:SetAttribute("LastHitAt", os.clock())
+
+	local oldTag = humanoid:FindFirstChild("creator")
+	if oldTag and oldTag:IsA("ObjectValue") then
+		oldTag:Destroy()
+	end
+
+	local creator = Instance.new("ObjectValue")
+	creator.Name = "creator"
+	creator.Value = player
+	creator.Parent = humanoid
+	Debris:AddItem(creator, 8)
+end
+
+local function createPiercingTracer(origin, hitPosition)
+	if typeof(origin) ~= "Vector3" or typeof(hitPosition) ~= "Vector3" then
+		return
+	end
+
+	local distance = (hitPosition - origin).Magnitude
+	if distance < 0.1 then
+		return
+	end
+
+	local startPart = Instance.new("Part")
+	startPart.Name = "PiercingShotTracerStart"
+	startPart.Anchored = true
+	startPart.CanCollide = false
+	startPart.CanTouch = false
+	startPart.CanQuery = false
+	startPart.Transparency = 1
+	startPart.Size = Vector3.new(0.05, 0.05, 0.05)
+	startPart.CFrame = CFrame.new(origin)
+	startPart.Parent = Workspace
+
+	local endPart = Instance.new("Part")
+	endPart.Name = "PiercingShotTracerEnd"
+	endPart.Anchored = true
+	endPart.CanCollide = false
+	endPart.CanTouch = false
+	endPart.CanQuery = false
+	endPart.Transparency = 1
+	endPart.Size = Vector3.new(0.05, 0.05, 0.05)
+	endPart.CFrame = CFrame.new(hitPosition)
+	endPart.Parent = Workspace
+
+	local startAttachment = Instance.new("Attachment")
+	startAttachment.Parent = startPart
+	local endAttachment = Instance.new("Attachment")
+	endAttachment.Parent = endPart
+
+	local beam = Instance.new("Beam")
+	beam.Name = "PiercingShotBeam"
+	beam.Attachment0 = startAttachment
+	beam.Attachment1 = endAttachment
+	beam.FaceCamera = true
+	beam.LightEmission = 1
+	beam.Brightness = 6
+	beam.Width0 = 0.42
+	beam.Width1 = 0.2
+	beam.Color = ColorSequence.new(Color3.fromRGB(130, 238, 255), Color3.fromRGB(255, 248, 190))
+	beam.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.05),
+		NumberSequenceKeypoint.new(0.45, 0),
+		NumberSequenceKeypoint.new(1, 0.35),
+	})
+	beam.Parent = startPart
+
+	Debris:AddItem(startPart, 0.16)
+	Debris:AddItem(endPart, 0.16)
+end
+
+local function getRangedDamageMultiplier(player)
+	local progression = player:FindFirstChild("Progression")
+	local metaProgression = player:FindFirstChild("MetaProgression")
+	local runLevelValue = progression and progression:FindFirstChild("RangedLevel")
+	local metaLevelValue = metaProgression and metaProgression:FindFirstChild("Damage")
+	local runLevel = runLevelValue and runLevelValue:IsA("IntValue") and math.max(0, runLevelValue.Value) or 0
+	local metaLevel = metaLevelValue and metaLevelValue:IsA("IntValue") and math.max(0, metaLevelValue.Value) or 0
+	local runSkill = combatConfig.Progression and combatConfig.Progression.Skills and combatConfig.Progression.Skills.RangedDamage
+	local metaDamage = combatConfig.MetaProgression and combatConfig.MetaProgression.Upgrades and combatConfig.MetaProgression.Upgrades.Damage
+
+	return 1
+		+ runLevel * (tonumber(runSkill and runSkill.DamageMultiplierPerLevel) or 0)
+		+ metaLevel * (tonumber(metaDamage and metaDamage.RangedDamagePerLevel) or 0)
+end
+
+local function equipWeaponKey(player, weaponKey)
+	local weapon = weaponsByKey[weaponKey]
+	if not weapon then
+		return false
+	end
+
+	local character = player.Character
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	if not humanoid then
+		return false
+	end
+
+	local backpack = player:FindFirstChildOfClass("Backpack")
+	local tool = character:FindFirstChild(weapon.ToolName)
+		or (backpack and backpack:FindFirstChild(weapon.ToolName))
+	if not (tool and tool:IsA("Tool")) then
+		return false
+	end
+
+	humanoid:EquipTool(tool)
+	return true
+end
+
+local function equipStanceWeapon(player, state)
+	local stance = abilityConfig.GetStance(state.professionKey, state.stanceKey)
+	local weaponKey = stance and stance.WeaponKey
+	if type(weaponKey) ~= "string" or weaponKey == "" then
+		return
+	end
+
+	task.spawn(function()
+		for _ = 1, 8 do
+			if player.Parent ~= Players then
+				return
+			end
+			if equipWeaponKey(player, weaponKey) then
+				return
+			end
+			task.wait(0.15)
+		end
+	end)
 end
 
 local function disconnectPlayerConnections(player)
@@ -318,6 +550,7 @@ local function setupPlayer(player)
 	player:SetAttribute("ProfessionKey", state.professionKey)
 	player:SetAttribute("ProfessionResourceName", state.resourceDisplayName)
 	player:SetAttribute("ProfessionStance", state.stanceKey)
+	equipStanceWeapon(player, state)
 
 	trackConnection(player, player:GetAttributeChangedSignal("SelectedClass"):Connect(function()
 		setProfession(player, resolveProfessionKey(player))
@@ -327,6 +560,7 @@ local function setupPlayer(player)
 	trackConnection(player, player.CharacterAdded:Connect(function(character)
 		bindCharacter(player, character)
 		task.defer(function()
+			equipStanceWeapon(player, getState(player))
 			sendState(player, true)
 		end)
 	end))
@@ -334,6 +568,7 @@ local function setupPlayer(player)
 	if player.Character then
 		task.defer(function()
 			bindCharacter(player, player.Character)
+			equipStanceWeapon(player, getState(player))
 			sendState(player, true)
 		end)
 	end
@@ -356,10 +591,126 @@ local function setStance(player, stanceKey)
 
 	state.stanceKey = stanceKey
 	player:SetAttribute("ProfessionStance", stanceKey)
+	equipStanceWeapon(player, state)
 	setStateMessage(state, ("Stance: %s"):format(profession.Stances[stanceKey].DisplayName or stanceKey))
 end
 
-local function useAbility(player, abilityKey)
+local function executePiercingShot(player, ability, payload)
+	if typeof(payload) ~= "table" then
+		return false, "Missing target data."
+	end
+
+	local weaponKey = getEquippedWeaponKey(player)
+	local weapon = weaponKey and weaponsByKey[weaponKey]
+	if not weapon or weapon.Category ~= "Ranged" then
+		return false, "Equip a ranged weapon first."
+	end
+
+	local character = player.Character
+	local head = character and character:FindFirstChild("Head")
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	local anchorPart = (head and head:IsA("BasePart")) and head or ((root and root:IsA("BasePart")) and root or nil)
+	if not anchorPart then
+		return false, "Character is not ready."
+	end
+
+	local damageOrigin = anchorPart.Position
+	local rayOrigin = payload.rayOrigin
+	local rayDirection = payload.rayDirection
+	if typeof(rayOrigin) == "Vector3" and typeof(rayDirection) == "Vector3" and rayDirection.Magnitude > 0.01 then
+		if (rayOrigin - anchorPart.Position).Magnitude <= 18 then
+			damageOrigin = rayOrigin
+		end
+	end
+
+	local direction = payload.direction
+	if typeof(direction) ~= "Vector3" or direction.Magnitude < 0.01 then
+		direction = rayDirection
+	end
+	if typeof(direction) ~= "Vector3" or direction.Magnitude < 0.01 then
+		return false, "Invalid aim direction."
+	end
+	direction = direction.Unit
+
+	local targetPosition = payload.targetPosition
+	if typeof(targetPosition) == "Vector3" then
+		local toTarget = targetPosition - damageOrigin
+		if toTarget.Magnitude > 0.01 then
+			direction = toTarget.Unit
+		end
+	end
+
+	local tracerOrigin = getRangedFireOrigin(player, weapon) or damageOrigin
+	local range = math.max(1, tonumber(ability.Range) or tonumber(weapon.Range) or 500)
+	local maxTargets = math.max(1, math.floor(tonumber(ability.MaxTargets) or 5))
+	local damageMultiplier = getRangedDamageMultiplier(player) * (tonumber(ability.DamageMultiplier) or 2.5)
+	local damage = math.max(1, math.floor((tonumber(weapon.Damage) or 1) * damageMultiplier + 0.5))
+	local ignoreList = { character }
+	local hitModels = {}
+	local totalDamage = 0
+	local hitCount = 0
+	local feedbackWorldPosition = nil
+	local finalHitPosition = damageOrigin + direction * range
+	local currentOrigin = damageOrigin
+	local remainingDistance = range
+
+	for _ = 1, maxTargets do
+		local rayParams = RaycastParams.new()
+		rayParams.FilterType = Enum.RaycastFilterType.Blacklist
+		rayParams.FilterDescendantsInstances = ignoreList
+
+		local result = Workspace:Raycast(currentOrigin, direction * remainingDistance, rayParams)
+		if not result then
+			finalHitPosition = currentOrigin + direction * remainingDistance
+			break
+		end
+
+		finalHitPosition = result.Position
+		local humanoid, model = findHumanoidFromPart(result.Instance)
+		if humanoid and model and model ~= character then
+			local isPlayerCharacter = Players:GetPlayerFromCharacter(model) ~= nil
+			if not isPlayerCharacter and humanoid.Health > 0 and not hitModels[model] then
+				tagHumanoidDamageByPlayer(humanoid, player)
+				humanoid:TakeDamage(damage)
+				totalDamage += damage
+				hitCount += 1
+				hitModels[model] = true
+				feedbackWorldPosition = feedbackWorldPosition or result.Position
+				table.insert(ignoreList, model)
+			else
+				table.insert(ignoreList, model)
+			end
+
+			local traveled = (result.Position - currentOrigin).Magnitude
+			remainingDistance -= traveled
+			if remainingDistance <= 0.5 then
+				break
+			end
+			currentOrigin = result.Position + direction * 0.25
+		else
+			break
+		end
+	end
+
+	createPiercingTracer(tracerOrigin + direction * 0.6, finalHitPosition)
+
+	if hitCount > 0 then
+		AbilityService.RegisterDamageDealt(player, totalDamage)
+		if combatFeedbackEvent then
+			combatFeedbackEvent:FireClient(player, {
+				type = "hit",
+				damage = totalDamage,
+				hitCount = hitCount,
+				category = "Ranged",
+				worldPosition = feedbackWorldPosition,
+			})
+		end
+	end
+
+	return true, ("Piercing Shot: %d hits."):format(hitCount)
+end
+
+local function useAbility(player, abilityKey, payload)
 	local state = getState(player)
 	local profession = select(1, abilityConfig.GetProfession(state.professionKey))
 	local ability = profession.Abilities and profession.Abilities[abilityKey]
@@ -394,6 +745,7 @@ local function useAbility(player, abilityKey)
 		end
 		spentResource = state.resource
 		state.resource = 0
+		state.dirty = true
 	elseif not spendResource(state, cost) then
 		setStateMessage(state, "Not enough " .. state.resourceDisplayName .. ".")
 		return
@@ -401,31 +753,46 @@ local function useAbility(player, abilityKey)
 		spentResource = tonumber(cost) or 0
 	end
 
-	state.cooldowns[abilityKey] = now + math.max(0, tonumber(ability.Cooldown) or 0)
-
-	if abilityKey == "Shield" then
+	local successMessage = nil
+	if abilityKey == "PiercingShot" then
+		local ok, message = executePiercingShot(player, ability, payload)
+		if not ok then
+			if cost == "All" then
+				state.resource = spentResource
+			else
+				state.resource = math.min(state.maxResource, state.resource + spentResource)
+			end
+			state.dirty = true
+			setStateMessage(state, message)
+			return
+		end
+		successMessage = message
+	elseif abilityKey == "Shield" then
 		local character = player.Character
 		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
 		local maxHealth = humanoid and humanoid.MaxHealth or 100
 		state.shield = math.max(state.shield, maxHealth * (tonumber(ability.ShieldMaxHealthMultiplier) or 0.1))
 		state.shieldExpiresAt = now + math.max(0, tonumber(ability.Duration) or 6)
-		setStateMessage(state, "Shield active.")
+		successMessage = "Shield active."
 	elseif abilityKey == "RageHeal" then
 		local character = player.Character
 		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
 		if humanoid and humanoid.Health > 0 then
 			local healAmount = humanoid.MaxHealth * spentResource * (tonumber(ability.HealMaxHealthPerRage) or 0)
 			humanoid.Health = math.min(humanoid.MaxHealth, humanoid.Health + healAmount)
-			setStateMessage(state, ("Rage Heal: +%d HP."):format(math.floor(healAmount + 0.5)))
+			successMessage = ("Rage Heal: +%d HP."):format(math.floor(healAmount + 0.5))
 		else
-			setStateMessage(state, "Rage Heal used.")
+			successMessage = "Rage Heal used."
 		end
 	elseif abilityKey == "UndyingRage" then
 		state.immortalUntil = now + math.max(0, tonumber(ability.Duration) or 5)
-		setStateMessage(state, "Undying Rage active.")
+		successMessage = "Undying Rage active."
 	else
-		setStateMessage(state, ability.DisplayName .. " is scaffolded.")
+		successMessage = ability.DisplayName .. " is scaffolded."
 	end
+
+	state.cooldowns[abilityKey] = now + math.max(0, tonumber(ability.Cooldown) or 0)
+	setStateMessage(state, successMessage)
 end
 
 local function handleClientAction(player, action, payload)
@@ -445,7 +812,7 @@ local function handleClientAction(player, action, payload)
 	end
 
 	if action == "useAbility" then
-		useAbility(player, tostring(payload.abilityKey or ""))
+		useAbility(player, tostring(payload.abilityKey or ""), payload)
 		sendState(player, true)
 		return
 	end
@@ -498,6 +865,7 @@ function AbilityService.Start()
 	end
 	started = true
 	abilityEvent = ensureRemoteEvent(abilityConfig.EventName)
+	combatFeedbackEvent = ensureRemoteEvent("CombatFeedback")
 
 	abilityEvent.OnServerEvent:Connect(handleClientAction)
 

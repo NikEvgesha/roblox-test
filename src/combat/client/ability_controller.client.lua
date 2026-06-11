@@ -1,12 +1,16 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
+local Workspace = game:GetService("Workspace")
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local abilityConfig = require(sharedFolder:WaitForChild("AbilityConfig"))
 local abilityEvent = ReplicatedStorage:WaitForChild(abilityConfig.EventName)
+local mouse = player:GetMouse()
+
+local AIM_RAY_DISTANCE = 2000
 
 local currentState = {
 	professionDisplayName = "Profession",
@@ -154,7 +158,7 @@ local function render()
 
 	local qAbility = getAbilityByType("Active", 1)
 	local cAbility = getAbilityByType("Active", 2)
-	local fAbility = getAbilityByType("Aura", 1) or getAbilityByType("Ultimate", 1)
+	local fAbility = getAbilityByType("Ultimate", 1) or getAbilityByType("Aura", 1)
 	hotkeyLabel.Text = ("%s | Q=%s | C=%s | F=%s"):format(
 		#stanceText > 0 and table.concat(stanceText, " / ") or "No stance",
 		qAbility and qAbility.displayName or "-",
@@ -172,6 +176,36 @@ local function setStanceByIndex(index)
 	end
 end
 
+local function buildAimPayload()
+	local camera = Workspace.CurrentCamera
+	if not camera then
+		return {}
+	end
+
+	local unitRay = mouse.UnitRay
+	local rayOrigin = unitRay and unitRay.Origin or camera.CFrame.Position
+	local rayDirection = unitRay and unitRay.Direction or camera.CFrame.LookVector
+	if typeof(rayDirection) ~= "Vector3" or rayDirection.Magnitude < 0.001 then
+		rayDirection = camera.CFrame.LookVector
+	end
+	rayDirection = rayDirection.Unit
+
+	local character = player.Character
+	local rayParams = RaycastParams.new()
+	rayParams.FilterType = Enum.RaycastFilterType.Blacklist
+	rayParams.FilterDescendantsInstances = character and { character } or {}
+
+	local result = Workspace:Raycast(rayOrigin, rayDirection * AIM_RAY_DISTANCE, rayParams)
+	local targetPosition = result and result.Position or (rayOrigin + rayDirection * AIM_RAY_DISTANCE)
+
+	return {
+		direction = rayDirection,
+		rayOrigin = rayOrigin,
+		rayDirection = rayDirection,
+		targetPosition = targetPosition,
+	}
+end
+
 local function useAbilityBySlot(slot)
 	local ability = nil
 	if slot == 1 then
@@ -179,11 +213,17 @@ local function useAbilityBySlot(slot)
 	elseif slot == 2 then
 		ability = getAbilityByType("Active", 2)
 	elseif slot == 3 then
-		ability = getAbilityByType("Aura", 1) or getAbilityByType("Ultimate", 1)
+		ability = getAbilityByType("Ultimate", 1) or getAbilityByType("Aura", 1)
 	end
 
 	if ability and ability.key then
-		abilityEvent:FireServer("useAbility", { abilityKey = ability.key })
+		local payload = { abilityKey = ability.key }
+		if ability.key == "PiercingShot" or ability.type == "Active" or ability.type == "Ultimate" then
+			for key, value in pairs(buildAimPayload()) do
+				payload[key] = value
+			end
+		end
+		abilityEvent:FireServer("useAbility", payload)
 	end
 end
 

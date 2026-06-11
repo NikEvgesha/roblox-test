@@ -57,6 +57,9 @@ AbilityConfig.Professions = {
 				Type = "Active",
 				Cost = 25,
 				Cooldown = 8,
+				DamageMultiplier = 2.5,
+				MaxTargets = 5,
+				Range = 520,
 				Description = "2.5x weapon damage, pierces up to 5 enemies.",
 			},
 			Grenade = {
