@@ -1303,7 +1303,7 @@ local function handleMeleeSwing(player, payload)
 	local center = root.Position + Vector3.new(0, 1.4, 0) + facingDirection * (weapon.Range * 0.5)
 	local parts = Workspace:GetPartBoundsInRadius(center, weapon.Range, overlapParams)
 	local hitModels = {}
-	local damageMultiplier = getMeleeDamageMultiplier(player)
+	local damageMultiplier = getMeleeDamageMultiplier(player) * abilityService.GetMeleeDamageMultiplier(player)
 	local finalDamage = math.max(1, math.floor((weapon.Damage * damageMultiplier) + 0.5))
 	local totalDamage = 0
 	local hitCount = 0

@@ -418,6 +418,35 @@ local function isAbilityUnlocked(state, abilityKey)
 	return getAbilityRank(state, abilityKey) > 0
 end
 
+local function getAbilityDefinition(state, abilityKey)
+	local profession = select(1, abilityConfig.GetProfession(state.professionKey))
+	return profession.Abilities and profession.Abilities[abilityKey]
+end
+
+local function getScaledAbilityNumber(state, abilityKey, baseField, perRankField, defaultValue)
+	local ability = getAbilityDefinition(state, abilityKey)
+	local rank = getAbilityRank(state, abilityKey)
+	local baseValue = tonumber(ability and ability[baseField]) or defaultValue or 0
+	local perRankValue = tonumber(ability and ability[perRankField]) or 0
+	return baseValue + math.max(0, rank - 1) * perRankValue
+end
+
+local function getGuardianIncomingDamageReduction(state)
+	if state.professionKey ~= "Guardian" then
+		return 0
+	end
+
+	local ironSkin = getAbilityDefinition(state, "IronSkin")
+	local reduction = getAbilityRank(state, "IronSkin") * (tonumber(ironSkin and ironSkin.DamageReductionPerRank) or 0)
+
+	if state.auraEnabled.TestAura == true then
+		local testAura = getAbilityDefinition(state, "TestAura")
+		reduction += tonumber(testAura and testAura.DefenseBonus) or 0
+	end
+
+	return math.clamp(reduction, 0, 0.75)
+end
+
 local function createState(player, professionKey)
 	local profession, normalizedKey = abilityConfig.GetProfession(professionKey)
 	local resourceConfig = profession.Resource or {}
@@ -631,10 +660,21 @@ local function bindCharacter(player, character)
 		if currentHealth < lastHealth then
 			local now = os.clock()
 			local damageTaken = lastHealth - currentHealth
+			local remainingDamage = damageTaken
 			local adjustedHealth = currentHealth
 
+			local damageReduction = getGuardianIncomingDamageReduction(state)
+			if damageReduction > 0 then
+				local prevented = damageTaken * damageReduction
+				if prevented > 0 then
+					remainingDamage = math.max(0, remainingDamage - prevented)
+					adjustedHealth = math.min(humanoid.MaxHealth, adjustedHealth + prevented)
+					state.dirty = true
+				end
+			end
+
 			if state.shield > 0 then
-				local absorbed = math.min(state.shield, damageTaken)
+				local absorbed = math.min(state.shield, remainingDamage)
 				if absorbed > 0 then
 					state.shield -= absorbed
 					adjustedHealth = math.min(humanoid.MaxHealth, adjustedHealth + absorbed)
@@ -756,6 +796,7 @@ local function executePiercingShot(player, ability, payload)
 		return false, "Missing target data."
 	end
 
+	local state = getState(player)
 	local weaponKey = getEquippedWeaponKey(player)
 	local weapon = weaponKey and weaponsByKey[weaponKey]
 	if not weapon or weapon.Category ~= "Ranged" then
@@ -798,10 +839,17 @@ local function executePiercingShot(player, ability, payload)
 
 	local tracerOrigin = getRangedFireOrigin(player, weapon) or damageOrigin
 	local range = math.max(1, tonumber(ability.Range) or tonumber(weapon.Range) or 500)
-	local maxTargets = math.max(1, math.floor(tonumber(ability.MaxTargets) or 5))
+	local maxTargets = math.max(1, math.floor(getScaledAbilityNumber(state, "PiercingShot", "MaxTargets", "MaxTargetsPerRank", 5)))
+	local abilityDamageMultiplier = getScaledAbilityNumber(
+		state,
+		"PiercingShot",
+		"DamageMultiplier",
+		"DamageMultiplierPerRank",
+		2.5
+	)
 	local damageMultiplier = getRangedDamageMultiplier(player)
 		* AbilityService.GetRangedDamageMultiplier(player, weaponKey)
-		* (tonumber(ability.DamageMultiplier) or 2.5)
+		* abilityDamageMultiplier
 	local damage = math.max(1, math.floor((tonumber(weapon.Damage) or 1) * damageMultiplier + 0.5))
 	local ignoreList = { character }
 	local hitModels = {}
@@ -943,8 +991,9 @@ local function applyAreaDamage(player, position, radius, damage)
 end
 
 local function executeGrenade(player, ability, payload)
-	local radius = math.max(1, tonumber(ability.Radius) or 12)
-	local damage = math.max(1, math.floor(tonumber(ability.Damage) or 120))
+	local state = getState(player)
+	local radius = math.max(1, getScaledAbilityNumber(state, "Grenade", "Radius", "RadiusPerRank", 12))
+	local damage = math.max(1, math.floor(getScaledAbilityNumber(state, "Grenade", "Damage", "DamagePerRank", 120)))
 	local fuseTime = math.max(0, tonumber(ability.FuseTime) or 0.8)
 	local maxRange = math.max(1, tonumber(ability.Range) or 120)
 	local targetPosition = resolveAbilityTargetPosition(player, payload, maxRange)
@@ -1038,21 +1087,37 @@ local function useAbility(player, abilityKey, payload)
 		local character = player.Character
 		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
 		local maxHealth = humanoid and humanoid.MaxHealth or 100
-		state.shield = math.max(state.shield, maxHealth * (tonumber(ability.ShieldMaxHealthMultiplier) or 0.1))
-		state.shieldExpiresAt = now + math.max(0, tonumber(ability.Duration) or 6)
+		local shieldMultiplier = getScaledAbilityNumber(
+			state,
+			"Shield",
+			"ShieldMaxHealthMultiplier",
+			"ShieldMaxHealthMultiplierPerRank",
+			0.1
+		)
+		local duration = getScaledAbilityNumber(state, "Shield", "Duration", "DurationPerRank", 6)
+		state.shield = math.max(state.shield, maxHealth * shieldMultiplier)
+		state.shieldExpiresAt = now + math.max(0, duration)
 		successMessage = "Shield active."
 	elseif abilityKey == "RageHeal" then
 		local character = player.Character
 		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
 		if humanoid and humanoid.Health > 0 then
-			local healAmount = humanoid.MaxHealth * spentResource * (tonumber(ability.HealMaxHealthPerRage) or 0)
+			local healPerRage = getScaledAbilityNumber(
+				state,
+				"RageHeal",
+				"HealMaxHealthPerRage",
+				"HealMaxHealthPerRagePerRank",
+				0.006
+			)
+			local healAmount = humanoid.MaxHealth * spentResource * healPerRage
 			humanoid.Health = math.min(humanoid.MaxHealth, humanoid.Health + healAmount)
 			successMessage = ("Rage Heal: +%d HP."):format(math.floor(healAmount + 0.5))
 		else
 			successMessage = "Rage Heal used."
 		end
 	elseif abilityKey == "UndyingRage" then
-		state.immortalUntil = now + math.max(0, tonumber(ability.Duration) or 5)
+		local duration = getScaledAbilityNumber(state, "UndyingRage", "Duration", "DurationPerRank", 5)
+		state.immortalUntil = now + math.max(0, duration)
 		successMessage = "Undying Rage active."
 	else
 		successMessage = ability.DisplayName .. " is scaffolded."
@@ -1211,14 +1276,27 @@ function AbilityService.RegisterDamageDealt(player, amount)
 	sendState(player, false)
 end
 
-function AbilityService.GetRangedDamageMultiplier(player, weaponKey)
+function AbilityService.GetDamageOutputMultiplier(player)
 	local state = getState(player)
-	if state.professionKey ~= "Gunner" then
+	if state.professionKey ~= "Guardian" then
 		return 1
 	end
 
+	local ability = getAbilityDefinition(state, "RageScaling")
+	local rank = getAbilityRank(state, "RageScaling")
+	local perRagePerRank = tonumber(ability and ability.DamageMultiplierPerRagePerRank) or 0
+	return math.max(0.1, 1 + state.resource * rank * perRagePerRank)
+end
+
+function AbilityService.GetRangedDamageMultiplier(player, weaponKey)
+	local state = getState(player)
+	local multiplier = AbilityService.GetDamageOutputMultiplier(player)
+
+	if state.professionKey ~= "Gunner" then
+		return multiplier
+	end
+
 	local profession = select(1, abilityConfig.GetProfession(state.professionKey))
-	local multiplier = 1
 
 	if weaponKey == "Pistol" then
 		local ability = profession.Abilities and profession.Abilities.PistolTraining
@@ -1226,6 +1304,18 @@ function AbilityService.GetRangedDamageMultiplier(player, weaponKey)
 	elseif weaponKey == "Rifle" then
 		local ability = profession.Abilities and profession.Abilities.RifleTraining
 		multiplier += getAbilityRank(state, "RifleTraining") * (tonumber(ability and ability.DamageMultiplierPerRank) or 0)
+	end
+
+	return math.max(0.1, multiplier)
+end
+
+function AbilityService.GetMeleeDamageMultiplier(player)
+	local state = getState(player)
+	local multiplier = AbilityService.GetDamageOutputMultiplier(player)
+
+	if state.professionKey == "Guardian" then
+		local ability = getAbilityDefinition(state, "HeavyStrikes")
+		multiplier += getAbilityRank(state, "HeavyStrikes") * (tonumber(ability and ability.MeleeDamageMultiplierPerRank) or 0)
 	end
 
 	return math.max(0.1, multiplier)
