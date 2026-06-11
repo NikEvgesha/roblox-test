@@ -1019,6 +1019,17 @@ local function updateState(state, deltaTime)
 		state.shieldExpiresAt = 0
 		state.dirty = true
 	end
+
+	for _, endsAt in pairs(state.cooldowns) do
+		if typeof(endsAt) == "number" and endsAt > now then
+			state.dirty = true
+			break
+		end
+	end
+
+	if state.immortalUntil > now then
+		state.dirty = true
+	end
 end
 
 function AbilityService.Start()
