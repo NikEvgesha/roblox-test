@@ -1750,14 +1750,23 @@ local function updateWaveDebugAttributes()
 	local budget = 0
 	local aliveCap = 0
 	local spawnInterval = 0
+	local aliveZombies = 0
+	local spawnsRemaining = 0
+	local bossSpawnsRemaining = 0
 
 	if not matchState.ended and matchState.waveActive and matchState.waveNumber > 0 then
 		budget = math.max(0, math.floor(tonumber(matchState.waveBudget) or 0))
 		aliveCap = getWaveAliveCap(matchState.waveNumber)
 		spawnInterval = math.floor(getWaveSpawnInterval(matchState.waveNumber) * 100 + 0.5) / 100
+		aliveZombies = countAliveZombies()
+		spawnsRemaining = math.max(0, math.floor(tonumber(matchState.waveSpawnsRemaining) or 0))
+		bossSpawnsRemaining = math.max(0, math.floor(tonumber(matchState.waveBossSpawnsRemaining) or 0))
 	end
 
 	setWaveDebugAttribute("WaveBudget", budget)
+	setWaveDebugAttribute("WaveSpawnsRemaining", spawnsRemaining)
+	setWaveDebugAttribute("WaveBossSpawnsRemaining", bossSpawnsRemaining)
+	setWaveDebugAttribute("AliveZombies", aliveZombies)
 	setWaveDebugAttribute("AliveCap", aliveCap)
 	setWaveDebugAttribute("SpawnInterval", spawnInterval)
 end
