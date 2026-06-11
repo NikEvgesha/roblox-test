@@ -31,7 +31,7 @@ return {
 
 	Lobby = {
 		CombatPlaceId = 81561302455824,
-		MaxPartySize = 6,
+		MaxPartySize = 8,
 		DefaultPartySize = 2,
 		DefaultPadCount = 2,
 		QueueTouchDebounceSeconds = 1.0,

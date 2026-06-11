@@ -1,5 +1,13 @@
 # Hybrid Source-of-Truth
 
+## Active Design Documents
+
+1. `GDD_V2.md` is the active human-readable game design.
+2. `GPT_PROJECT_CONTEXT.md` is the compact context file for AI-assisted work.
+3. `CUBE_PROTOTYPE_PLAN.md` is the active implementation plan for the cube prototype.
+4. `ABILITY_SYSTEM_SPEC.md` is the active technical spec for professions/resources/abilities.
+5. `GDD_MVP.md` is historical. If it conflicts with `GDD_V2.md`, use `GDD_V2.md`.
+
 ## Ownership Matrix
 
 | Domain | Source of Truth | Storage |
