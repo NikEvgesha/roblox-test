@@ -109,6 +109,7 @@ src/shared
 - Guardian implemented: Rage gain/decay, `Shield`, `RageHeal`, `UndyingRage`, `TestAura` toggle/drain, damage reduction, melee damage, damage per Rage.
 - Combat minimap draft: player-centered map with enemy red dots from `Workspace.Zombies`.
 - First one-time map upgrade: `DamageShrine` in combat, costs soft money once per run and grants run-only melee/ranged damage levels.
+- Debug all-weapons spawn is disabled; profession starter weapons and shop purchases now matter in prototype tests.
 
 Важно: часть docs и task board устарели. Актуальный дизайн теперь в `GDD_V2.md`.
 

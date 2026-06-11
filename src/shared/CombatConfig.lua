@@ -414,7 +414,7 @@ return {
 	},
 
 	Debug = {
-		GrantAllWeaponsOnSpawn = true,
+		GrantAllWeaponsOnSpawn = false,
 	},
 
 	DefaultOwnedWeapons = { "Bulava" },
