@@ -184,7 +184,7 @@ openSkillsButton.BackgroundColor3 = Color3.fromRGB(58, 80, 120)
 openSkillsButton.TextColor3 = Color3.fromRGB(245, 245, 245)
 openSkillsButton.Font = Enum.Font.GothamBold
 openSkillsButton.TextSize = 14
-openSkillsButton.Text = "Skills [K]"
+openSkillsButton.Text = "Run Stats [K]"
 openSkillsButton.Parent = gui
 
 local openSkillsCorner = Instance.new("UICorner")
@@ -466,7 +466,7 @@ skillsTitle.Font = Enum.Font.GothamBold
 skillsTitle.TextColor3 = Color3.fromRGB(241, 241, 241)
 skillsTitle.TextSize = 20
 skillsTitle.TextXAlignment = Enum.TextXAlignment.Left
-skillsTitle.Text = "Character Skills"
+skillsTitle.Text = "Run Stat Upgrades"
 skillsTitle.Parent = skillsFrame
 
 local closeSkillsButton = Instance.new("TextButton")
@@ -507,7 +507,7 @@ skillsStatusLabel.TextSize = 14
 skillsStatusLabel.TextXAlignment = Enum.TextXAlignment.Left
 skillsStatusLabel.TextYAlignment = Enum.TextYAlignment.Top
 skillsStatusLabel.TextWrapped = true
-skillsStatusLabel.Text = "Spend 1 point to upgrade 1 skill level."
+skillsStatusLabel.Text = "Optional stat upgrades. Profession abilities use the left ability panel."
 skillsStatusLabel.Parent = skillsFrame
 
 local skillsList = Instance.new("ScrollingFrame")

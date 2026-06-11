@@ -266,12 +266,17 @@ local function buildAbilityRow(ability, index)
 	button.TextColor3 = Color3.fromRGB(245, 245, 245)
 	button.Parent = row
 
-	if ability.canUpgrade then
+	local availablePoints = math.max(0, math.floor(tonumber(currentState.skillPoints) or 0))
+	if ability.canUpgrade and availablePoints >= upgradeCost then
 		button.Text = "+1"
 		button.BackgroundColor3 = Color3.fromRGB(70, 116, 82)
 		button.MouseButton1Click:Connect(function()
 			abilityEvent:FireServer("upgradeAbility", { abilityKey = ability.key })
 		end)
+	elseif ability.canUpgrade then
+		button.Text = "No SP"
+		button.BackgroundColor3 = Color3.fromRGB(76, 64, 55)
+		button.Active = false
 	else
 		button.Text = "Max"
 		button.BackgroundColor3 = Color3.fromRGB(72, 72, 72)
