@@ -13,7 +13,7 @@
 - `GAMEPLAY_LOOP_SYSTEM_SPEC.md` - wave survival state machine and contracts.
 - `GAMEPLAY_LOOP_SYSTEM_SETUP.md` - runtime wiring for lobby/combat flow.
 - `GAMEPLAY_LOOP_TEST_PLAN.md` - smoke/regression checks for the new loop.
-- `LINEAR_WORKFLOW.md` - issue policy, labels, and status rules.
-- `TEAM_RULES.md` - collaboration and conflict-avoidance rules for 3 developers.
+- `LINEAR_WORKFLOW.md` and `LINEAR_SEED_ISSUES.md` - archived planning process; not current source of truth.
+- `TEAM_RULES.md` - archived collaboration rules for the former 3-developer workflow.
 - `RELEASE_CHECKLIST.md` - release publish/rollback runbook.
 - `WORLD_CHANGELOG.md` - history of Studio world/asset changes.

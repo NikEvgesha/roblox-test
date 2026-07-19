@@ -1,5 +1,7 @@
 # TEAM_RULES
 
+> Archived rules for the former three-developer workflow. Current ownership is defined in `../AGENTS.md`.
+
 ## Ownership and Conflict Policy
 
 Default zones:

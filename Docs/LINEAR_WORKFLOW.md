@@ -1,5 +1,7 @@
 # Linear Workflow
 
+> Archived process. Current task status lives in `MVP_TASK_BOARD.md` and `../TODO.md`.
+
 ## Required Fields
 
 - Issue key (for example `IGR-101`) must be referenced in:

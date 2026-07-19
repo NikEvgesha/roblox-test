@@ -1,5 +1,7 @@
 # Linear Seed Issues (IGR)
 
+> Archived seed data. Do not use this file as the current backlog.
+
 Use these as initial issues/epics for the Roblox project.
 
 ## Epic 1: Core Gameplay Loop

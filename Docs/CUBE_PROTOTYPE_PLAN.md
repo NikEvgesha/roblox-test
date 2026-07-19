@@ -16,11 +16,11 @@
 
 ## Milestone 0 - Техническая База
 
-Статус: частично готово.
+Статус: готово и проверено `2026-07-19`.
 
-Нужно проверить и при необходимости поправить:
+Проверенная конфигурация:
 
-- Rojo `7.6.1`.
+- Rojo `7.7.0`.
 - Lobby serve на `34872`.
 - Combat serve на `34873`.
 - MCP подключение к обоим Studio.
@@ -314,10 +314,13 @@ Bosses: multiple patterns
 
 ## Ближайшие Технические Задачи
 
-1. Обновить config под `MaxPartySize = 8`.
-2. Привести docs task board к `GDD_V2`.
-3. Проверить lobby teleport на живом опубликованном experience.
-4. Спроектировать data model для `Profession`, `Ability`, `Resource`.
-5. Сделать ability runtime skeleton.
-6. Сделать enemy cube templates.
-7. Сделать minimap draft.
+1. `[Done]` Обновить config под `MaxPartySize = 8`.
+2. `[Done]` Привести docs task board к `GDD_V2`.
+3. `[User]` Проверить lobby teleport на живом опубликованном experience.
+4. `[Done]` Спроектировать data model для `Profession`, `Ability`, `Resource`.
+5. `[Done]` Сделать ability runtime skeleton для Gunner и Guardian.
+6. `[Done]` Подключить первый набор enemy templates и wave variants.
+7. `[Done]` Сделать minimap draft.
+8. `[Next]` Пройти полный тестовый забег на `10` волн с boss и возвратом в Lobby.
+9. `[Next]` Добавить автоматические тесты чистой игровой логики.
+10. `[Next]` Разделить крупные runtime-скрипты на сервисы без изменения поведения.

@@ -6,7 +6,7 @@ Describe runtime setup for a two-place structure (`Lobby Place` + `Combat Place`
 
 ## Required Files (MVP)
 
-- `src/lobby/server/main.server.lua`
+- `src/lobby/server/matchmaking.server.lua`
 - `src/lobby/server/boot.server.lua`
 - `src/lobby/client/main.client.lua`
 - `src/combat/server/boot.server.lua`
@@ -16,7 +16,6 @@ Describe runtime setup for a two-place structure (`Lobby Place` + `Combat Place`
 - `src/combat/client/main.client.lua`
 - `src/shared/Shared.lua`
 - `src/shared/CombatConfig.lua`
-- `default.project.json`
 - `lobby.project.json`
 - `combat.project.json`
 
@@ -33,18 +32,17 @@ Describe runtime setup for a two-place structure (`Lobby Place` + `Combat Place`
 ## Local Setup
 
 1. `aftman install`
-2. `rojo serve lobby.project.json --port 34872`
-3. `rojo serve combat.project.json --port 34873`
-4. In Studio (Rojo plugin), connect lobby place to `localhost:34872`
-5. In Studio (Rojo plugin), connect combat place to `localhost:34873`
-6. Verify Rojo-managed scripts are visible in Explorer
+2. `powershell -ExecutionPolicy Bypass -File scripts/start-dev.ps1`
+3. In Studio (Rojo plugin), connect lobby place to `localhost:34872`
+4. In Studio (Rojo plugin), connect combat place to `localhost:34873`
+5. Verify Rojo-managed scripts are visible in Explorer
 
 ## Place Setup Checklist
 
 1. Prepare 2 places in the same experience:
    - `Lobby Place`
    - `Combat Place`
-2. Store both `placeId` values in server config (TBD: final config path).
+2. Keep both Place IDs in `src/shared/CombatConfig.lua`.
 3. Confirm teleport from lobby to combat and back is enabled.
 4. Configure spawn zones and safe start points in both places.
 

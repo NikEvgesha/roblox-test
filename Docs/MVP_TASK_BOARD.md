@@ -1,63 +1,84 @@
-# MVP_TASK_BOARD
+# MVP Task Board
+
+Last verified: `2026-07-19`
 
 ## Rules
 
 - Statuses: `Backlog`, `In Progress`, `Blocked`, `Done`.
-- `Owner` values:
-  - `Assistant` - implemented by Codex.
-  - `You` - implemented by you in Studio.
-  - `Shared` - pair decision/work.
-- On task completion: add commit reference and short verification note.
+- `Assistant` means Codex implementation.
+- `You` means Roblox/visual/account work performed by the project owner.
+- `Shared` means a design, balance, or playtest decision.
+- `Done` requires implementation plus an appropriate build, Studio smoke test, or published-client test.
 
-## Epic A - Lobby & Match Entry
+## Epic A - Lobby And Match Entry
 
-| ID | Task | Owner | Status | Output |
+| ID | Task | Owner | Status | Verification / Next Gate |
 |---|---|---|---|---|
-| A-1 | Lock lobby UX baseline (ready/start flow) | Assistant | Done | `Docs/GDD_MVP.md` |
-| A-2 | Lock match start policy (solo allowed + fixed wave run mode) | Assistant | Done | `Docs/OPEN_QUESTIONS.md` |
-| A-3 | Implement teleport Lobby -> Combat | Assistant | Backlog | Server teleport flow |
-| A-4 | Place and polish lobby visuals | You | Backlog | Lobby scene pass |
-| A-5 | Implement queue-pad host flow (host config, join limits, auto/manual start) | Assistant | Backlog | Lobby matchmaking queue logic |
+| A-1 | Lock lobby UX baseline | Assistant | Done | `Docs/GDD_V2.md` |
+| A-2 | Lock solo/manual/filled-party start policy | Assistant | Done | `Docs/OPEN_QUESTIONS.md` |
+| A-3 | Teleport Lobby to reserved Combat server | Assistant | In Progress | Code exists; published Roblox-client test is pending |
+| A-4 | Place and polish lobby visuals | You | Backlog | Final scene pass after cube prototype |
+| A-5 | Queue-pad host flow for 1-8 players | Assistant | Done | Host, join limit, difficulty, manual/auto start implemented |
+| A-6 | Keep Lobby and Combat in one Experience | Shared | Done | GameId `9947791898`; Lobby is Start Place |
 
 ## Epic B - Wave Loop
 
-| ID | Task | Owner | Status | Output |
+| ID | Task | Owner | Status | Verification / Next Gate |
 |---|---|---|---|---|
-| B-1 | Define wave loop state machine spec | Assistant | Done | `Docs/GAMEPLAY_LOOP_SYSTEM_SPEC.md` |
-| B-2 | Implement baseline wave prep/active/intermission cycle | Assistant | Backlog | `src/combat/server/combat.server.lua` |
-| B-3 | Configure boss waves every 10th checkpoint | Assistant | Backlog | `src/combat/server/zombies.server.lua` |
-| B-4 | Lock exact fixed wave target for run victory | Shared | Done | `100` baseline (tunable) |
-| B-5 | Implement player-count scaling (1..6) + difficulty modifiers | Assistant | Backlog | Wave director scaling rules |
+| B-1 | Define wave loop state machine | Assistant | Done | `Docs/GAMEPLAY_LOOP_SYSTEM_SPEC.md` |
+| B-2 | Implement prep/active/intermission cycle | Assistant | Done | Combat starts without runtime errors |
+| B-3 | Spawn boss every 10th wave | Assistant | Done | Config and wave director implemented |
+| B-4 | Fixed run target | Shared | Done | 10-wave cube test; 100-wave long target |
+| B-5 | Player-count and difficulty scaling for 1-8 | Assistant | Done | Party income/count and four difficulty tiers implemented |
+| B-6 | Complete 10-wave end-to-end playtest | Shared | Backlog | Boss, crystals, victory, return to Lobby |
 
-## Epic C - Classes & Skills
+## Epic C - Professions And Abilities
 
-| ID | Task | Owner | Status | Output |
+| ID | Task | Owner | Status | Verification / Next Gate |
 |---|---|---|---|---|
-| C-1 | Lock MVP class roster and roles | Assistant | Done | `Docs/GDD_MVP.md` |
-| C-2 | Define class ability sheet v1 (level points + optional ULT every 6 levels) | Assistant | Done | `Docs/CLASS_ABILITY_SHEET_V1.md` |
-| C-3 | Implement class selection and effect application | Assistant | Backlog | `src/combat/server/skills.server.lua` + client UI |
-| C-4 | Final class balance pass (damage/heal/cooldowns) | Shared | Backlog | Balance table |
-| C-5 | Implement universal infinite stat node (`Endless Mastery`) | Assistant | Backlog | Skill tree + runtime stat scaling |
+| C-1 | Lock first profession roster | Assistant | Done | `Docs/GDD_V2.md` |
+| C-2 | Define ability/resource model | Assistant | Done | `Docs/ABILITY_SYSTEM_SPEC.md` |
+| C-3 | Profession selection and teleport loadout | Assistant | Done | Gunner/Guardian selection and run loadout implemented |
+| C-4 | Gunner prototype kit | Assistant | Done | Mana, stance, passives, Piercing Shot, Grenade |
+| C-5 | Guardian prototype kit | Assistant | Done | Rage, passives, Shield, Rage Heal, ultimate, test aura |
+| C-6 | Final profession balance | Shared | Backlog | Starts after vertical slice is stable |
+| C-7 | Endless Mastery infinite stat node | Assistant | Backlog | Design exists; runtime tree not implemented |
 
-## Epic D - Economy & Map Interaction
+## Epic D - Economy, Death And Map Interaction
 
-| ID | Task | Owner | Status | Output |
+| ID | Task | Owner | Status | Verification / Next Gate |
 |---|---|---|---|---|
-| D-1 | Lock economy loop (income/spend) | Assistant | Done | `Docs/GDD_MVP.md` |
-| D-2 | Implement intermission shop flow (server + draft UI) | Assistant | Backlog | Static distributed shop system |
-| D-3 | Place upgrade stations and risk zones in map | You | Backlog | Map interaction points |
-| D-4 | Wire station/risk gameplay scripts to placed map points | Assistant | Backlog | Interaction scripts |
-| D-5 | Implement persistent boss crystal drops + lobby upgrade spend | Assistant | Backlog | Meta currency pipeline |
-| D-6 | Implement paid revive flow (Solo 10R$ / Team 50R$ on wipe) | Assistant | Backlog | Respawn economy flow |
-| D-7 | Implement shared kill-reward distribution with group bonus split | Assistant | Backlog | Reward distributor service |
-| D-8 | Implement character unlocks (Crystal shop + achievement unlocks) | Assistant | Backlog | Character progression unlock service |
+| D-1 | Lock Soft/XP/Crystals economy | Assistant | Done | `Docs/GDD_V2.md` |
+| D-2 | Temporary run shop and draft UI | Assistant | Done | Server purchases and draft shop UI implemented |
+| D-3 | Place final shops, stations and risk zones | You | Backlog | After prototype map layout is selected |
+| D-4 | One-time map upgrade interaction | Assistant | In Progress | Damage Shrine exists; generic station/risk framework remains |
+| D-5 | Persistent crystals and lobby meta upgrade | Assistant | Done | Profile store and lobby upgrade flow implemented |
+| D-6 | Solo/team Developer Product revive | Assistant | In Progress | Receipt flow exists; live purchase test pending |
+| D-7 | Shared kill rewards and party bonus | Assistant | Done | Soft/XP split formula implemented |
+| D-8 | Profession unlocks and achievements | Assistant | Backlog | Definitions and persistence model pending |
+| D-9 | Centralize MarketplaceService receipts | Assistant | Backlog | Remove receipt ownership from wave director |
 
-## Epic E - UI/QA/Playtest
+## Epic E - UI, QA And Performance
 
-| ID | Task | Owner | Status | Output |
+| ID | Task | Owner | Status | Verification / Next Gate |
 |---|---|---|---|---|
-| E-1 | Update smoke/regression test plan | Assistant | Done | `Docs/GAMEPLAY_LOOP_TEST_PLAN.md` |
-| E-2 | Build draft HUD for waves/shop/skills | Assistant | Backlog | Temporary playable HUD |
-| E-3 | Build final UI visual pass | You | Backlog | Final UI |
-| E-4 | Execute `TS-01..TS-04` after each milestone | Shared | Backlog | Test notes |
-| E-5 | Add spectate/free-fly flow while dead | Assistant | Backlog | Death spectator UX |
+| E-1 | Maintain smoke/regression plan | Assistant | Done | `Docs/GAMEPLAY_LOOP_TEST_PLAN.md` |
+| E-2 | Draft wave/shop/skills HUD | Assistant | Done | Prototype UI implemented |
+| E-3 | Final UI visual pass | You | Backlog | Starts after UX stabilizes |
+| E-4 | Run local smoke tests after milestones | Assistant | In Progress | Lobby and Combat boot cleanly |
+| E-5 | Spectator/free-fly while dead | Assistant | Done | Camera and movement prototype verified manually |
+| E-6 | Add automated Luau tests | Assistant | Backlog | Extract pure modules, then add Studio test harness |
+| E-7 | Split oversized runtime scripts | Assistant | Backlog | Preserve behavior while extracting services |
+| E-8 | Remove unused enemy-pack overhead | Shared | Backlog | You select retained assets; Assistant cleans hierarchy |
+| E-9 | Profile target combat wave | Assistant | Backlog | Re-run scene and MicroProfiler checks after cleanup |
+
+## Epic F - Tooling And Release
+
+| ID | Task | Owner | Status | Verification / Next Gate |
+|---|---|---|---|---|
+| F-1 | Two guarded Rojo mappings | Assistant | Done | Lobby `34872`, Combat `34873`, `servePlaceIds` configured |
+| F-2 | Upgrade Rojo CLI and plugin to 7.7.0 | Shared | Done | Both servers use 7.7.0; Studio plugin updated |
+| F-3 | Add repository working instructions | Assistant | Done | `AGENTS.md` and new-day workflow |
+| F-4 | Add formatting, linting and analysis tools | Assistant | Backlog | StyLua, Selene, Luau LSP analysis |
+| F-5 | Add repeatable build/start command | Assistant | Done | `scripts/start-dev.ps1` validates builds and both ports |
+| F-6 | Publish both places and test production entry | You | In Progress | Publish, then launch from Roblox client |

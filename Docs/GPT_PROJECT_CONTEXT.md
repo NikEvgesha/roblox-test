@@ -66,7 +66,7 @@ E:\GitFork\RobloxProject
 Rojo:
 
 ```text
-Rojo 7.6.1
+Rojo 7.7.0
 Lobby  -> localhost:34872 -> lobby.project.json
 Combat -> localhost:34873 -> combat.project.json
 ```
@@ -115,10 +115,11 @@ src/shared
 
 ## Ближайший Правильный План
 
-1. Завершить документацию `GDD_V2`.
-2. Составить кубовый prototype backlog.
-3. Привести текущий код к новой модели `1-8 players + professions + ability types`.
-4. Сделать минимальный вертикальный срез:
+1. Проверить опубликованный teleport `Lobby -> Combat` через Roblox-клиент.
+2. Пройти полный кубовый забег на `10` волн и проверить возврат в Lobby.
+3. Добавить автоматические проверки чистой игровой логики.
+4. Разделить крупные runtime-скрипты на тестируемые сервисы.
+5. Довести минимальный вертикальный срез:
    - lobby group;
    - profession select;
    - teleport;

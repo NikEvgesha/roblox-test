@@ -5,7 +5,7 @@ This repository uses Rojo as the only script sync pipeline.
 ## Prerequisites
 
 1. Install `aftman` from the official releases.
-2. Install the Rojo Studio plugin from the official releases page.
+2. Install the matching Rojo Studio plugin with `rojo plugin install`.
 3. Make sure Roblox Studio is updated.
 
 ## CLI Setup
@@ -17,20 +17,28 @@ aftman install
 rojo --version
 ```
 
-Expected result: Rojo v7 is available in shell.
+Expected result: `Rojo 7.7.0` is available in shell.
+
+Install or refresh the matching local Studio plugin:
+
+```powershell
+rojo plugin install
+```
+
+If Studio still loads an older Marketplace copy, uninstall that copy from `Plugins -> Manage Plugins`, restart every Studio window, and keep the CLI-managed `RojoManagedPlugin.rbxm`.
 
 ## Studio Connection
 
 1. Open your Group-owned place in Studio.
-2. Start Rojo for needed place from repository root:
+2. Start and verify both projects from the repository root:
 
 ```powershell
-rojo serve lobby.project.json --port 34872
-# or
-rojo serve combat.project.json --port 34873
+powershell -ExecutionPolicy Bypass -File scripts/start-dev.ps1
 ```
 
-3. In Studio, open Rojo plugin and connect to the matching port.
+3. In Studio, open the Rojo plugin and connect to the matching port:
+   - Lobby / Start Place `81561302455824` -> `34872`.
+   - Combat `135533599453315` -> `34873`.
 4. Confirm mapped trees appear in Explorer:
    - Lobby place:
      - `ServerScriptService` <- `src/lobby/server`

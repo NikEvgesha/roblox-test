@@ -15,13 +15,13 @@
 | Luau scripts | Git | `src/*` |
 | Config/docs/process | Git | repo files |
 | Places/world/terrain/assets | Roblox cloud | Group-owned experience |
-| Planning/priorities/status | Linear | Team board |
+| Planning/priorities/status | Git | `Docs/MVP_TASK_BOARD.md` and `TODO.md` |
 
 ## Ground Rules
 
 1. Do not treat `.rbxl/.rbxlx` exports as merge artifacts.
 2. Keep code changes in Git with Rojo sync, not only in Studio.
 3. Every world-only change must be written to `WORLD_CHANGELOG.md`.
-4. Every change should reference a Linear issue key (for example `IGR-42`).
-5. A task is done only when code/world + docs + issue status are all updated.
+4. Every completed milestone updates `Docs/MVP_TASK_BOARD.md` or `TODO.md`.
+5. A task is done only when code/world, verification, and relevant docs are updated.
 6. Script Sync is not used in this repository.

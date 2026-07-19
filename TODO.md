@@ -1,92 +1,60 @@
-# TODO (RobloxProject)
+# TODO - Heroic Survival
 
-Last updated: `2026-03-27`
+Last updated: `2026-07-19`
 
 ## Snapshot
 
-- Health: `planning-locked`
-- Current phase: `MVP documentation locked + sprint 1 shaping`
-- Top blocker: `class kit details still open`
+- Health: `prototype-running`
+- Current phase: `cube vertical slice verification`
+- Active Experience GameId: `9947791898`
+- Lobby Start Place: `81561302455824`
+- Combat Place: `135533599453315`
+- Rojo: `7.7.0`; Lobby `34872`; Combat `34873`
 
-## Documentation Baseline (Current)
+## Current Blockers
 
-- `Docs/GDD_MVP.md`
-- `Docs/CLASS_ABILITY_SHEET_V1.md`
-- `Docs/GAMEPLAY_LOOP_SYSTEM_SPEC.md`
-- `Docs/GAMEPLAY_LOOP_SYSTEM_SETUP.md`
-- `Docs/GAMEPLAY_LOOP_TEST_PLAN.md`
-- `Docs/MVP_TASK_BOARD.md`
-- `Docs/OPEN_QUESTIONS.md`
+1. Published `Lobby -> Combat` teleport has not been verified in the Roblox client.
+2. A full 10-wave run through boss, crystals, victory, and return to Lobby has not been recorded.
+3. Developer Product receipts exist but need a controlled live purchase test.
+4. Core runtime scripts are oversized and have no automated test coverage.
 
-## Linear Sync (Roblox Test MVP)
+## Next Queue
 
-Project URL:
-- `https://linear.app/igrodelnya/project/roblox-test-mvp-bb15e8b25790`
-
-Current top queue:
-
-| Issue | Status | Priority | Milestone | Deliverable |
-|---|---|---|---|---|
-| `IGR-5` | `Todo` | `High` | `Foundation Setup` | Rojo onboarding for all 3 devs |
-| `IGR-6` | `Todo` | `Medium` | `Foundation Setup` | Branch/merge convention adopted |
-| `IGR-7` | `Todo` | `High` | `Core Loop Vertical Slice` | Gameplay loop spec v1 |
-| `IGR-8` | `Todo` | `High` | `Core Loop Vertical Slice` | Server round state machine skeleton |
-| `IGR-9` | `Todo` | `High` | `Core Loop Vertical Slice` | Client HUD for round state |
-
-## Local MVP Queue (Pre-Linear sync)
-
-| Task ID | Status | Owner | Deliverable |
+| Priority | Task | Owner | Exit Criteria |
 |---|---|---|---|
-| `A-2` | `Done` | `Assistant` | Match start policy locked (solo allowed, fixed-wave mode, wave target baseline 100) |
-| `B-4` | `Done` | `Shared` | Wave target baseline locked to 100 (tunable upward) |
-| `C-2` | `Done` | `Assistant` | Ability sheet v1 with level points + ULT gating + rank cap policy |
-| `R-1` | `Done` | `Shared` | Death flow locked (no penalty, free timer 10s +10s/death, paid solo/team revive) |
-| `B-2` | `Backlog` | `Assistant` | First stable wave loop in server runtime |
-| `A-5` | `Backlog` | `Assistant` | Queue-pad host flow (join limits + start logic) |
-| `B-5` | `Backlog` | `Assistant` | Player-count scaling + difficulty modifiers |
-| `D-2` | `Backlog` | `Assistant` | Shop flow between waves (with draft UI) |
-| `D-5` | `Backlog` | `Assistant` | Persistent boss crystals + lobby upgrade spend |
-| `D-6` | `Backlog` | `Assistant` | Paid revive flow (Solo 10R$ / Team 50R$ on wipe) |
-| `D-7` | `Backlog` | `Assistant` | Shared kill rewards with group bonus split |
-| `D-8` | `Backlog` | `Assistant` | Character unlocks via crystal shop + achievements |
-| `C-5` | `Backlog` | `Assistant` | Universal infinite stat node (`Endless Mastery`) |
-| `E-5` | `Backlog` | `Assistant` | Spectate/free-fly flow while dead |
-| `E-3` | `Backlog` | `You` | Final UI visual pass |
+| P0 | Publish Lobby and Combat | You | Both cloud places contain the latest Rojo-synced code |
+| P0 | Configure Combat access | You | Maximum visitors `8`; `Secure within Universe only` |
+| P0 | Test Lobby to Combat teleport | You + Assistant | Solo party reaches reserved Combat server with selected profession/difficulty |
+| P0 | Run 10-wave vertical slice | Assistant | Wave 10 boss dies, crystals persist, players return to Lobby |
+| P1 | Add pure logic test modules | Assistant | Reward, scaling, progression, and ability rules run without a full match |
+| P1 | Centralize Developer Product receipts | Assistant | One receipt router owns `MarketplaceService.ProcessReceipt` |
+| P1 | Extract wave director services | Assistant | `zombies.server.lua` is split without behavior regression |
+| P1 | Extract combat client controllers | Assistant | Input, weapons, spectator, and UI concerns are separated |
+| P2 | Select retained enemy/weapon assets | You | Explicit keep/remove list for Combat hierarchy |
+| P2 | Clean and profile Combat assets | Assistant | Unused pack content removed; scene metrics recorded |
 
-## Sprint 1 Draft (5 Tasks)
+## Ownership
 
-| Sprint Task | Owner | Status | Exit Criteria |
-|---|---|---|---|
-| `S1-1` Implement teleport Lobby -> Combat (`A-3`) | Assistant | Backlog | Party reliably reaches combat place |
-| `S1-2` Implement wave loop core (`B-2`) | Assistant | Backlog | 3+ wave cycle stable in Play Test |
-| `S1-3` Implement boss interval logic (`B-3`) | Assistant | Backlog | Boss spawns every 10th wave |
-| `S1-4` Place lobby/combat visual pass v0 (`A-4` + map prep) | You | Backlog | Functional visual landmarks and play space |
-| `S1-5` Build draft HUD for waves/shop (`E-2`) | Assistant | Backlog | Playable temporary HUD for loop validation |
+| Area | Owner |
+|---|---|
+| Gameplay and infrastructure code | Assistant |
+| Draft UI | Assistant |
+| Final visual direction and asset selection | You |
+| Final map object placement | You |
+| Final UI art pass | You |
+| Balance and feel | Shared |
 
-## Daily Cycle (Required)
+## Quality Gate
 
-1. Pick top `Todo` issue in Linear.
-2. Move issue to `In Progress`.
-3. Implement one concrete deliverable (up to one day).
-4. Verify in Studio Play Test.
-5. Update `TODO.md` + `GPT_JOURNAL.md` + `WORLD_CHANGELOG.md` (if world changed).
-6. Add commit hash and verification note to issue comment.
-7. Move issue to `In Review` or `Done` the same day.
-
-## Quality Gate (Per Task)
-
-- [ ] Verifiable Studio result exists.
-- [ ] Code is in Git and linked by commit hash.
-- [ ] Docs were updated when behavior/process changed.
-- [ ] Linear issue closed with verification note.
+- [ ] Both Rojo builds pass.
+- [ ] Lobby and Combat boot without runtime errors.
+- [ ] Changed behavior has a manual or automated verification note.
+- [ ] Active docs match code and current Place IDs.
+- [ ] Git worktree contains no accidental Studio-generated files.
 
 ## Release Gate
 
-- [ ] Version History snapshot created before publish.
-- [ ] Publish performed from group-owned experience.
-- [ ] Post-release smoke test passed.
-
-## Team Conflict Rules
-
-- [ ] No cross-zone changes without issue + agreement.
-- [ ] Large scene edits are done in scheduled time windows.
+- [ ] Save a Version History snapshot before publishing.
+- [ ] Publish Lobby and Combat from the group-owned Experience.
+- [ ] Launch from the Roblox client through the Lobby Start Place.
+- [ ] Verify teleport, selected profession/difficulty, rewards, and return flow.

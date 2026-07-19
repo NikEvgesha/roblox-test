@@ -1,6 +1,6 @@
 # OPEN_QUESTIONS
 
-## Resolved Decisions (2026-03-27)
+## Resolved Decisions (updated 2026-07-19)
 
 1. Target run length: `20+ minutes`.
 2. Win condition type: `fixed wave count`.
@@ -25,7 +25,7 @@
     - standard skill node max rank = `20`;
     - universal stat node (`Endless Mastery`) is infinite rank.
 13. Match scale and difficulty:
-    - lobby supports up to `6` players;
+    - lobby and combat party support up to `8` players;
     - difficulty is selected before run;
     - locked difficulty multipliers: `Easy x0.5`, `Medium x1`, `Hard x2`, `Insane x4`.
 14. Death/respawn policy:
@@ -65,7 +65,7 @@
 
 1. Should enemy count scale with player count only, or also with player levels?
 2. Do we need a hard cap for alive enemies at the same time?
-3. What are target scaling multipliers for party sizes 1..6?
+3. What are final target scaling multipliers for party sizes 1..8?
 
 ## Q2 - Difficulty / Rewards
 

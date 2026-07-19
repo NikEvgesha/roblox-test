@@ -213,7 +213,7 @@ return {
 		BaseRewardXP = 20,
 
 		DifficultyStepSeconds = 60,
-		HealthScalePerStage = 0.12,
+		HealthScalePerStage = 0.01,
 		SpeedScalePerStage = 0.05,
 		DamageScalePerStage = 0.1,
 		RewardScalePerStage = 0.08,

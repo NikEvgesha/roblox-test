@@ -1,27 +1,22 @@
-# Start Prompt (RobloxProject)
+# Start Prompt - Heroic Survival
 
-Read these files before any implementation session:
+Read before implementation:
 
-1. `README.md`
-2. `TODO.md`
-3. `GPT_JOURNAL.md`
-4. `Docs/README.md`
-5. `Docs/SOURCE_OF_TRUTH.md`
-6. `Docs/ROJO_SETUP.md`
-7. `Docs/GAMEPLAY_LOOP_SYSTEM_SPEC.md`
-8. `Docs/GAMEPLAY_LOOP_SYSTEM_SETUP.md`
-9. `Docs/GAMEPLAY_LOOP_TEST_PLAN.md`
-10. `Docs/TEAM_RULES.md`
-11. `Docs/RELEASE_CHECKLIST.md`
-12. `Docs/WORLD_CHANGELOG.md`
+1. `AGENTS.md`
+2. `Docs/GPT_PROJECT_CONTEXT.md`
+3. `Docs/GDD_V2.md`
+4. `Docs/CUBE_PROTOTYPE_PLAN.md`
+5. `Docs/ABILITY_SYSTEM_SPEC.md`
+6. `Docs/MVP_TASK_BOARD.md`
+7. `TODO.md`
 
-Session ritual:
+Session start:
 
-1. Pick highest priority open item from `TODO.md` or active Linear issue.
-2. Move issue status to `In Progress`.
-3. Confirm issue scope fits one concrete deliverable (up to one workday).
-4. Implement in local files (`src/*`) and sync to Studio.
-5. Verify in Studio Play Test.
-6. Add proof to issue: commit hash + test summary.
-7. Update `TODO.md`, `GPT_JOURNAL.md`, and `Docs/WORLD_CHANGELOG.md` (if world changed).
-8. Move issue to `In Review` or `Done` in the same day.
+1. Run `powershell -ExecutionPolicy Bypass -File scripts/start-dev.ps1`.
+2. List Roblox Studio instances through MCP and identify them by PlaceId/GameId.
+3. Pick the highest-priority open item from `TODO.md`.
+4. Implement Rojo-managed code in `src`.
+5. Build both mappings when shared code or config changes.
+6. Smoke-test the affected Place and inspect Output.
+7. Update the task board and relevant docs.
+8. Commit and push only verified changes.
