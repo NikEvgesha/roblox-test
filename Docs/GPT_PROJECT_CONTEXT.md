@@ -85,8 +85,8 @@ src/shared
 
 | Place | PlaceId | Назначение |
 |---|---:|---|
-| `RobloxProjectLobby` | `101936198553206` | Lobby |
-| `RobloxProjectCombat` | `81561302455824` | Combat |
+| `RobloxProjectLobby` | `81561302455824` | Lobby (Start Place) |
+| `RobloxProjectCombat` | `135533599453315` | Combat |
 
 ## Что Уже Есть В Коде
 

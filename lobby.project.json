@@ -1,5 +1,7 @@
 {
   "name": "RobloxProjectLobby",
+  "servePort": 34872,
+  "servePlaceIds": [81561302455824],
   "tree": {
     "$className": "DataModel",
     "ReplicatedStorage": {

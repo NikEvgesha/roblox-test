@@ -30,7 +30,7 @@ return {
 	},
 
 	Lobby = {
-		CombatPlaceId = 81561302455824,
+		CombatPlaceId = 135533599453315,
 		MaxPartySize = 8,
 		DefaultPartySize = 2,
 		DefaultPadCount = 2,
@@ -92,7 +92,7 @@ return {
 	},
 
 	Zombies = {
-		LobbyPlaceId = 101936198553206,
+		LobbyPlaceId = 81561302455824,
 		DefaultDifficulty = "Medium",
 		TargetWaveCount = 10,
 		IntermissionSeconds = 12,

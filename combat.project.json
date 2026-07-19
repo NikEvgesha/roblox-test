@@ -1,5 +1,7 @@
 {
   "name": "RobloxProjectCombat",
+  "servePort": 34873,
+  "servePlaceIds": [135533599453315],
   "tree": {
     "$className": "DataModel",
     "ReplicatedStorage": {
