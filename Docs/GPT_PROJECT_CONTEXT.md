@@ -113,7 +113,7 @@ src/shared
 - Published `Lobby -> Combat -> Lobby` routing was verified in the Roblox client on `2026-07-19`.
 - Wave completion prunes structurally invalid zombie states so detached Humanoids cannot leave `1 alive` forever.
 - Wave spawn cadence uses `Zombies.WaveSpawnSpeedMultiplier = 10` for the current high-density prototype test.
-- Studio-only mob load controls spawn `1`, `10`, or `100` moving Walker enemies and grant the tester invisible damage protection.
+- Mob load controls spawn `1`, `10`, or `100` moving Walker enemies and grant invisible damage protection. They are available in Studio and in published servers only to UserIds explicitly listed in `Debug.EnemySpawnerAuthorizedUserIds`.
 - Gunner magazines and reload are disabled through `Ammo.MagazinesEnabled = false`; ranged shots still use profession resources where configured.
 
 Важно: часть docs и task board устарели. Актуальный дизайн теперь в `GDD_V2.md`.

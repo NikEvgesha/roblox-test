@@ -21,7 +21,7 @@ Validate that the wave survival loop remains stable after each task and does not
 | SMK-12 | Team wipe revive | Full team wipe, buy team revive in 30s | All downed players return, run continues |
 | SMK-11 | Difficulty impact | Start runs on different difficulties | Enemy strength and rewards scale by selected tier |
 | SMK-13 | Ghost enemy cleanup | Detach a living enemy Humanoid after all spawns finish | Invalid state is pruned and the wave resolves |
-| SMK-14 | Studio mob load controls | Click `Spawn 1`, `Spawn 10`, and `Spawn 100` in Combat Studio | Requested moving enemies spawn; tester remains alive; no runtime errors |
+| SMK-14 | Authorized mob load controls | Click `Spawn 1`, `Spawn 10`, and `Spawn 100` in Combat Studio or as an authorized published user | Requested moving enemies spawn; tester remains alive; unauthorized users have no panel |
 | SMK-15 | Gunner unlimited ammunition | Fire ranged weapons continuously and press `R` | Shots do not stop, no ammo HUD appears, and reload does not run |
 
 ## Regression Matrix

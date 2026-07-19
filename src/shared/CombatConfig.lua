@@ -418,6 +418,8 @@ return {
 	Debug = {
 		GrantAllWeaponsOnSpawn = false,
 		EnableStudioEnemySpawner = true,
+		EnablePublishedEnemySpawner = true,
+		EnemySpawnerAuthorizedUserIds = { 7414680949 },
 	},
 
 	DefaultOwnedWeapons = { "Bulava" },

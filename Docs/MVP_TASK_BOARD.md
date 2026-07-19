@@ -72,7 +72,7 @@ Last verified: `2026-07-19`
 | E-7 | Split oversized runtime scripts | Assistant | Backlog | Preserve behavior while extracting services |
 | E-8 | Remove unused enemy-pack overhead | Shared | Backlog | You select retained assets; Assistant cleans hierarchy |
 | E-9 | Profile target combat wave | Assistant | Backlog | Re-run scene and MicroProfiler checks after cleanup |
-| E-10 | Add Studio mob load controls | Shared | In Progress | Buttons for `1/10/100`; owner performance-limit test pending |
+| E-10 | Add authorized mob load controls | Shared | In Progress | Studio and owner-only published buttons for `1/10/100`; performance-limit test pending |
 
 ## Epic F - Tooling And Release
 

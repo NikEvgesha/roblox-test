@@ -646,9 +646,27 @@ local function safeLoadCharacter(player)
 	end)
 end
 
-local function ensureStudioLoadTestProtection(character)
+local function canUseDebugEnemySpawner(player)
 	local debugConfig = combatConfig.Debug or {}
-	if not RunService:IsStudio() or debugConfig.EnableStudioEnemySpawner ~= true or not character then
+	if RunService:IsStudio() then
+		return debugConfig.EnableStudioEnemySpawner == true
+	end
+
+	if debugConfig.EnablePublishedEnemySpawner ~= true or not player then
+		return false
+	end
+
+	for _, userId in ipairs(debugConfig.EnemySpawnerAuthorizedUserIds or {}) do
+		if tonumber(userId) == player.UserId then
+			return true
+		end
+	end
+
+	return false
+end
+
+local function ensureDebugLoadTestProtection(player, character)
+	if not canUseDebugEnemySpawner(player) or not character then
 		return
 	end
 
@@ -2378,7 +2396,7 @@ local function onCharacterAdded(player, character)
 	state.downed = false
 	state.deathToken += 1
 	removeDownedMarker(player)
-	ensureStudioLoadTestProtection(character)
+	ensureDebugLoadTestProtection(player, character)
 
 	if wipeState.active and countAlivePlayers() > 0 then
 		wipeState.active = false
@@ -2501,8 +2519,7 @@ local debugSpawnCounts = { [1] = true, [10] = true, [100] = true }
 local debugSpawnCooldownByUserId = {}
 
 debugEnemySpawnEvent.OnServerEvent:Connect(function(player, requestedCount)
-	local debugConfig = combatConfig.Debug or {}
-	if not RunService:IsStudio() or debugConfig.EnableStudioEnemySpawner ~= true then
+	if not canUseDebugEnemySpawner(player) then
 		return
 	end
 
@@ -2517,7 +2534,7 @@ debugEnemySpawnEvent.OnServerEvent:Connect(function(player, requestedCount)
 	end
 	debugSpawnCooldownByUserId[player.UserId] = now
 
-	ensureStudioLoadTestProtection(player.Character)
+	ensureDebugLoadTestProtection(player, player.Character)
 
 	task.spawn(function()
 		local spawned = 0

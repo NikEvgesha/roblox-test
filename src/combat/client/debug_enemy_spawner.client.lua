@@ -7,7 +7,17 @@ local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local combatConfig = require(sharedFolder:WaitForChild("CombatConfig"))
 local debugConfig = combatConfig.Debug or {}
 
-if not RunService:IsStudio() or debugConfig.EnableStudioEnemySpawner ~= true then
+local spawnerAuthorized = RunService:IsStudio() and debugConfig.EnableStudioEnemySpawner == true
+if not spawnerAuthorized and debugConfig.EnablePublishedEnemySpawner == true then
+	for _, userId in ipairs(debugConfig.EnemySpawnerAuthorizedUserIds or {}) do
+		if tonumber(userId) == Players.LocalPlayer.UserId then
+			spawnerAuthorized = true
+			break
+		end
+	end
+end
+
+if not spawnerAuthorized then
 	return
 end
 
@@ -40,7 +50,7 @@ title.Position = UDim2.fromOffset(12, 8)
 title.Size = UDim2.new(1, -24, 0, 24)
 title.BackgroundTransparency = 1
 title.Font = Enum.Font.GothamBold
-title.Text = "STUDIO MOB LOAD TEST"
+title.Text = "MOB LOAD TEST"
 title.TextColor3 = Color3.fromRGB(245, 196, 80)
 title.TextSize = 15
 title.TextXAlignment = Enum.TextXAlignment.Left
@@ -76,7 +86,7 @@ statusLabel.Position = UDim2.fromOffset(12, 102)
 statusLabel.Size = UDim2.new(1, -24, 0, 28)
 statusLabel.BackgroundTransparency = 1
 statusLabel.Font = Enum.Font.Gotham
-statusLabel.Text = "Adds moving Walkers. Studio damage protection is on."
+statusLabel.Text = "Adds moving Walkers. Test damage protection is on."
 statusLabel.TextColor3 = Color3.fromRGB(158, 168, 178)
 statusLabel.TextSize = 12
 statusLabel.TextWrapped = true
