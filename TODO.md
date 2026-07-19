@@ -13,19 +13,17 @@ Last updated: `2026-07-19`
 
 ## Current Blockers
 
-1. Published `Lobby -> Combat` teleport has not been verified in the Roblox client.
-2. A full 10-wave run through boss, crystals, victory, and return to Lobby has not been recorded.
-3. Developer Product receipts exist but need a controlled live purchase test.
-4. Core runtime scripts are oversized and have no automated test coverage.
+1. The ghost-enemy wave stall is fixed locally but needs one published Wave 10 retest.
+2. Developer Product receipts exist but need a controlled live purchase test.
+3. Core runtime scripts are oversized and have no automated test coverage.
 
 ## Next Queue
 
 | Priority | Task | Owner | Exit Criteria |
 |---|---|---|---|
-| P0 | Publish Lobby and Combat | You | Both cloud places contain the latest Rojo-synced code |
-| P0 | Configure Combat access | You | Maximum visitors `8`; `Secure within Universe only` |
-| P0 | Test Lobby to Combat teleport | You + Assistant | Solo party reaches reserved Combat server with selected profession/difficulty |
-| P0 | Run 10-wave vertical slice | Assistant | Wave 10 boss dies, crystals persist, players return to Lobby |
+| P0 | Publish the ghost-enemy fix to Combat | You | Combat cloud version contains the latest Rojo-synced code |
+| P0 | Retest Wave 10 completion | You + Assistant | Boss and all mobs die, run resolves, players return to Lobby |
+| P0 | Confirm Combat access | You | Maximum visitors `8`; `Secure within Universe only` |
 | P1 | Add pure logic test modules | Assistant | Reward, scaling, progression, and ability rules run without a full match |
 | P1 | Centralize Developer Product receipts | Assistant | One receipt router owns `MarketplaceService.ProcessReceipt` |
 | P1 | Extract wave director services | Assistant | `zombies.server.lua` is split without behavior regression |
@@ -56,5 +54,6 @@ Last updated: `2026-07-19`
 
 - [ ] Save a Version History snapshot before publishing.
 - [ ] Publish Lobby and Combat from the group-owned Experience.
-- [ ] Launch from the Roblox client through the Lobby Start Place.
-- [ ] Verify teleport, selected profession/difficulty, rewards, and return flow.
+- [x] Launch from the Roblox client through the Lobby Start Place.
+- [x] Verify the Lobby to Combat to Lobby route.
+- [ ] Verify selected profession/difficulty, Wave 10 rewards, and clean run completion.

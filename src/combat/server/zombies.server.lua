@@ -1647,11 +1647,37 @@ local function getRandomSpawnPoint()
 	return points[math.random(1, #points)]
 end
 
+local function isZombieStateAlive(zombie, state)
+	if not state or state.dead then
+		return false
+	end
+
+	local humanoid = state.humanoid
+	local root = state.root
+	return zombie.Parent == zombiesFolder
+		and humanoid ~= nil
+		and humanoid.Parent ~= nil
+		and humanoid:IsDescendantOf(zombie)
+		and humanoid.Health > 0
+		and root ~= nil
+		and root.Parent ~= nil
+		and root:IsDescendantOf(zombie)
+end
+
+local function discardZombieState(zombie, state)
+	if cleanupZombieAnimationTracks then
+		cleanupZombieAnimationTracks(state)
+	end
+	zombieStates[zombie] = nil
+end
+
 local function countAliveZombies()
 	local count = 0
-	for _, state in pairs(zombieStates) do
-		if state.humanoid and state.humanoid.Health > 0 then
+	for zombie, state in pairs(zombieStates) do
+		if isZombieStateAlive(zombie, state) then
 			count += 1
+		else
+			discardZombieState(zombie, state)
 		end
 	end
 	return count
@@ -2634,7 +2660,10 @@ task.spawn(function()
 			local now = os.clock()
 			if matchState.waveActive and not wipeState.active and matchState.waveSpawnsRemaining > 0 then
 				if now >= matchState.nextSpawnAt then
-					spawnZombieFromPoint()
+					local ok, err = pcall(spawnZombieFromPoint)
+					if not ok then
+						warn("[Survival] Zombie spawn failed:\n" .. tostring(err))
+					end
 					matchState.nextSpawnAt = now + getWaveSpawnInterval(matchState.waveNumber)
 				end
 			end
@@ -2662,9 +2691,8 @@ RunService.Heartbeat:Connect(function(deltaTime)
 		local humanoid = state.humanoid
 		local root = state.root
 
-		if not zombie.Parent or not humanoid or humanoid.Health <= 0 or not root or not root.Parent then
-			cleanupZombieAnimationTracks(state)
-			zombieStates[zombie] = nil
+		if not isZombieStateAlive(zombie, state) then
+			discardZombieState(zombie, state)
 		else
 			local _, targetHumanoid, targetRoot, distance = getNearestPlayer(root.Position)
 			if targetHumanoid and targetRoot and distance < math.huge then

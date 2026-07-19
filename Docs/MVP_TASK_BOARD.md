@@ -16,7 +16,7 @@ Last verified: `2026-07-19`
 |---|---|---|---|---|
 | A-1 | Lock lobby UX baseline | Assistant | Done | `Docs/GDD_V2.md` |
 | A-2 | Lock solo/manual/filled-party start policy | Assistant | Done | `Docs/OPEN_QUESTIONS.md` |
-| A-3 | Teleport Lobby to reserved Combat server | Assistant | In Progress | Code exists; published Roblox-client test is pending |
+| A-3 | Teleport Lobby to reserved Combat server | Assistant | Done | Published `Lobby -> Combat -> Lobby` test passed `2026-07-19` |
 | A-4 | Place and polish lobby visuals | You | Backlog | Final scene pass after cube prototype |
 | A-5 | Queue-pad host flow for 1-8 players | Assistant | Done | Host, join limit, difficulty, manual/auto start implemented |
 | A-6 | Keep Lobby and Combat in one Experience | Shared | Done | GameId `9947791898`; Lobby is Start Place |
@@ -30,7 +30,7 @@ Last verified: `2026-07-19`
 | B-3 | Spawn boss every 10th wave | Assistant | Done | Config and wave director implemented |
 | B-4 | Fixed run target | Shared | Done | 10-wave cube test; 100-wave long target |
 | B-5 | Player-count and difficulty scaling for 1-8 | Assistant | Done | Party income/count and four difficulty tiers implemented |
-| B-6 | Complete 10-wave end-to-end playtest | Shared | Backlog | Boss, crystals, victory, return to Lobby |
+| B-6 | Complete 10-wave end-to-end playtest | Shared | In Progress | Ghost-enemy stall fixed locally; published retest pending |
 
 ## Epic C - Professions And Abilities
 
@@ -81,4 +81,4 @@ Last verified: `2026-07-19`
 | F-3 | Add repository working instructions | Assistant | Done | `AGENTS.md` and new-day workflow |
 | F-4 | Add formatting, linting and analysis tools | Assistant | Backlog | StyLua, Selene, Luau LSP analysis |
 | F-5 | Add repeatable build/start command | Assistant | Done | `scripts/start-dev.ps1` validates builds and both ports |
-| F-6 | Publish both places and test production entry | You | In Progress | Publish, then launch from Roblox client |
+| F-6 | Publish both places and test production entry | You | Done | Published route verified `2026-07-19` |

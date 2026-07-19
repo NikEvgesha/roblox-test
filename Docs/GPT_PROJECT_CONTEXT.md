@@ -110,6 +110,8 @@ src/shared
 - Combat minimap draft: player-centered map with enemy red dots from `Workspace.Zombies`.
 - First one-time map upgrade: `DamageShrine` in combat, costs soft money once per run and grants run-only melee/ranged damage levels.
 - Debug all-weapons spawn is disabled; profession starter weapons and shop purchases now matter in prototype tests.
+- Published `Lobby -> Combat -> Lobby` routing was verified in the Roblox client on `2026-07-19`.
+- Wave completion prunes structurally invalid zombie states so detached Humanoids cannot leave `1 alive` forever.
 
 Важно: часть docs и task board устарели. Актуальный дизайн теперь в `GDD_V2.md`.
 
