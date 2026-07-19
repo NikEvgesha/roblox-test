@@ -7,6 +7,7 @@ local Workspace = game:GetService("Workspace")
 local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local abilityConfig = require(sharedFolder:WaitForChild("AbilityConfig"))
 local combatConfig = require(sharedFolder:WaitForChild("CombatConfig"))
+local gameRules = require(sharedFolder:WaitForChild("GameRules"))
 
 local AbilityService = {}
 
@@ -774,21 +775,26 @@ local function upgradeAbility(player, abilityKey)
 
 	local currentRank = getAbilityRank(state, abilityKey)
 	local maxRank = math.max(1, math.floor(tonumber(ability.MaxRank) or 1))
-	if currentRank >= maxRank then
+	local points = getSkillPointsValue(player, true)
+	local decision = gameRules.GetAbilityUpgradeDecision(
+		currentRank,
+		maxRank,
+		points and points.Value or 0,
+		ability.UpgradeCost
+	)
+	if decision.reason == "maxed" then
 		setStateMessage(state, "Ability is already maxed.")
 		return
 	end
 
-	local cost = math.max(1, math.floor(tonumber(ability.UpgradeCost) or 1))
-	local points = getSkillPointsValue(player, true)
-	if not points or points.Value < cost then
+	if not decision.allowed or not points then
 		setStateMessage(state, "Not enough skill points.")
 		return
 	end
 
-	points.Value -= cost
-	state.abilityRanks[abilityKey] = currentRank + 1
-	setStateMessage(state, ("Upgraded %s to rank %d."):format(ability.DisplayName or abilityKey, currentRank + 1))
+	points.Value -= decision.cost
+	state.abilityRanks[abilityKey] = decision.nextRank
+	setStateMessage(state, ("Upgraded %s to rank %d."):format(ability.DisplayName or abilityKey, decision.nextRank))
 end
 
 local function executePiercingShot(player, ability, payload)

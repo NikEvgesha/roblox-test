@@ -57,7 +57,7 @@ Last verified: `2026-07-19`
 | D-6 | Solo/team Developer Product revive | Assistant | In Progress | Receipt flow exists; live purchase test pending |
 | D-7 | Shared kill rewards and party bonus | Assistant | Done | Soft/XP split formula implemented |
 | D-8 | Profession unlocks and achievements | Assistant | Backlog | Definitions and persistence model pending |
-| D-9 | Centralize MarketplaceService receipts | Assistant | Backlog | Remove receipt ownership from wave director |
+| D-9 | Centralize MarketplaceService receipts | Assistant | Done | `ReceiptRouter` is the sole `ProcessReceipt` owner; revive products register handlers |
 
 ## Epic E - UI, QA And Performance
 
@@ -68,11 +68,11 @@ Last verified: `2026-07-19`
 | E-3 | Final UI visual pass | You | Backlog | Starts after UX stabilizes |
 | E-4 | Run local smoke tests after milestones | Assistant | In Progress | Lobby and Combat boot cleanly |
 | E-5 | Spectator/free-fly while dead | Assistant | Done | Camera and movement prototype verified manually |
-| E-6 | Add automated Luau tests | Assistant | Backlog | Extract pure modules, then add Studio test harness |
+| E-6 | Add automated Luau tests | Assistant | Done | `GameRulesTests` validates 26 reward, scaling, progression, respawn, economy, and ability assertions |
 | E-7 | Split oversized runtime scripts | Assistant | Backlog | Preserve behavior while extracting services |
 | E-8 | Remove unused enemy-pack overhead | Shared | Backlog | You select retained assets; Assistant cleans hierarchy |
-| E-9 | Profile target combat wave | Assistant | Backlog | Re-run scene and MicroProfiler checks after cleanup |
-| E-10 | Add authorized mob load controls | Shared | In Progress | Studio and owner-only published buttons for `1/10/100`; performance-limit test pending |
+| E-9 | Profile target combat wave | Shared | In Progress | Owner load-test controls work; record the practical mob/FPS limit |
+| E-10 | Add authorized mob load controls | Shared | Done | Studio and owner-only published buttons for `1/10/100` verified by owner |
 
 ## Epic F - Tooling And Release
 

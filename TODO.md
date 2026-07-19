@@ -13,19 +13,19 @@ Last updated: `2026-07-19`
 
 ## Current Blockers
 
-1. The ghost-enemy wave stall is fixed locally but needs one published Wave 10 retest.
+1. The ghost-enemy wave stall fix is published but still needs one full Wave 10 retest.
 2. Developer Product receipts exist but need a controlled live purchase test.
-3. Core runtime scripts are oversized and have no automated test coverage.
+3. Core runtime scripts are oversized; core reward/scaling/progression/ability calculations now have automated coverage.
 
 ## Next Queue
 
 | Priority | Task | Owner | Exit Criteria |
 |---|---|---|---|
-| P0 | Publish the ghost-enemy fix to Combat | You | Combat cloud version contains the latest Rojo-synced code |
+| Done | Publish the ghost-enemy fix to Combat | You | Published owner load-test build includes the wave fix |
 | P0 | Retest Wave 10 completion | You + Assistant | Boss and all mobs die, run resolves, players return to Lobby |
 | P0 | Confirm Combat access | You | Maximum visitors `8`; `Secure within Universe only` |
-| P1 | Add pure logic test modules | Assistant | Reward, scaling, progression, and ability rules run without a full match |
-| P1 | Centralize Developer Product receipts | Assistant | One receipt router owns `MarketplaceService.ProcessReceipt` |
+| Done | Add pure logic test modules | Assistant | `GameRulesTests` passes 26 assertions in Combat Studio |
+| Done | Centralize Developer Product receipts | Assistant | `ReceiptRouter` is the only owner of `MarketplaceService.ProcessReceipt` |
 | P1 | Extract wave director services | Assistant | `zombies.server.lua` is split without behavior regression |
 | P1 | Extract combat client controllers | Assistant | Input, weapons, spectator, and UI concerns are separated |
 | P2 | Select retained enemy/weapon assets | You | Explicit keep/remove list for Combat hierarchy |

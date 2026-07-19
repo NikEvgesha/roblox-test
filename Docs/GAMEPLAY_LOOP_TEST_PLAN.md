@@ -24,6 +24,12 @@ Validate that the wave survival loop remains stable after each task and does not
 | SMK-14 | Authorized mob load controls | Click `Spawn 1`, `Spawn 10`, and `Spawn 100` in Combat Studio or as an authorized published user | Requested moving enemies spawn; tester remains alive; unauthorized users have no panel |
 | SMK-15 | Gunner unlimited ammunition | Fire ranged weapons continuously and press `R` | Shots do not stop, no ammo HUD appears, and reload does not run |
 
+## Automated Studio Tests
+
+- Combat Studio runs `GameRulesTests` automatically.
+- Passing state: `Workspace.GameRulesTestsPassed == true`.
+- Current suite: `26` assertions for party rewards, XP progression, difficulty/stat scaling, respawn timing, meta costs, and ability upgrades.
+
 ## Regression Matrix
 
 | Area | Risk | Check |

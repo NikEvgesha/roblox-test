@@ -5,6 +5,7 @@ local META_EVENT_NAME = "LobbyMetaEvent"
 
 local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local combatConfig = require(sharedFolder:WaitForChild("CombatConfig"))
+local gameRules = require(sharedFolder:WaitForChild("GameRules"))
 local profileStore = require(sharedFolder:WaitForChild("ProfileStore"))
 
 local metaConfig = combatConfig.MetaProgression or {}
@@ -66,9 +67,7 @@ end
 
 local function getUpgradeCost(upgradeKey, level)
 	local config = upgradesConfig[upgradeKey] or {}
-	local baseCost = math.max(1, math.floor(tonumber(config.BaseCost) or 1))
-	local costStep = math.max(0, math.floor(tonumber(config.CostStep) or 0))
-	return baseCost + math.max(0, level) * costStep
+	return gameRules.GetUpgradeCost(config.BaseCost, config.CostStep, level)
 end
 
 local function buildStatePayload(player, message)

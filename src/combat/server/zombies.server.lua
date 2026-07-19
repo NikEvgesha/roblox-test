@@ -9,7 +9,9 @@ local KeyframeSequenceProvider = game:GetService("KeyframeSequenceProvider")
 
 local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local combatConfig = require(sharedFolder:WaitForChild("CombatConfig"))
+local gameRules = require(sharedFolder:WaitForChild("GameRules"))
 local profileStore = require(sharedFolder:WaitForChild("ProfileStore"))
+local receiptRouter = require(script.Parent:WaitForChild("ReceiptRouter"))
 
 local zombieConfig = combatConfig.Zombies
 local progressionConfig = combatConfig.Progression
@@ -205,8 +207,6 @@ local startSpawn = ensureStartSpawn()
 
 local zombieStates = {}
 local playerStates = {}
-local pendingProductRequests = {}
-local processedReceipts = {}
 local wipeState = {
 	active = false,
 	token = 0,
@@ -354,10 +354,6 @@ local function ensureProgression(player)
 	return progression
 end
 
-local function getXpForLevel(level)
-	return progressionConfig.BaseXpForLevel + math.max(0, level - 1) * progressionConfig.XpGrowthPerLevel
-end
-
 local function addXp(player, amount)
 	local leaderstats = player:FindFirstChild("leaderstats")
 	if not leaderstats then
@@ -368,24 +364,16 @@ local function addXp(player, amount)
 	local level = ensureIntStat(leaderstats, "Level", 1)
 	local progression = ensureProgression(player)
 	local skillPoints = ensureIntStat(progression, "SkillPoints", 0)
-	local remaining = math.max(0, math.floor(amount))
-
-	while remaining > 0 do
-		local need = getXpForLevel(level.Value) - xp.Value
-		if need <= 0 then
-			level.Value += 1
-			skillPoints.Value += 1
-			xp.Value = 0
-		elseif remaining >= need then
-			remaining -= need
-			level.Value += 1
-			skillPoints.Value += 1
-			xp.Value = 0
-		else
-			xp.Value += remaining
-			remaining = 0
-		end
-	end
+	local result = gameRules.ApplyXp(
+		level.Value,
+		xp.Value,
+		amount,
+		progressionConfig.BaseXpForLevel,
+		progressionConfig.XpGrowthPerLevel
+	)
+	level.Value = result.level
+	xp.Value = result.xp
+	skillPoints.Value += result.levelsGained
 end
 
 local function ensureLeaderstats(player)
@@ -479,28 +467,15 @@ local function applyTeleportRunConfigFromPlayer(player)
 	return changed
 end
 
-local function getRewardBonusMultiplier(playerCount)
-	if playerCount <= 1 then
-		return 1
-	end
-
-	local perPlayer = tonumber(zombieConfig.PartyRewardBonusPerPlayer) or 0.1
-	return 1 + perPlayer * playerCount
-end
-
 local function getEnemyCountPartyMultiplier(playerCount)
-	if playerCount <= 1 then
-		return 1
-	end
-
 	local perPlayer = tonumber(zombieConfig.PartyEnemyCountBonusPerPlayer) or 0.1
-	return 1 + perPlayer * playerCount
+	return gameRules.GetPartyMultiplier(playerCount, perPlayer)
 end
 
 local function getFreeRespawnSecondsForDeath(deathCount)
 	local base = tonumber(zombieConfig.FreeRespawnBaseSeconds) or 10
 	local increment = tonumber(zombieConfig.FreeRespawnIncrementSeconds) or 10
-	return base + math.max(0, deathCount - 1) * increment
+	return gameRules.GetFreeRespawnSeconds(deathCount, base, increment)
 end
 
 local function awardZombieKillToParty(rewardMoney, rewardXP)
@@ -510,9 +485,9 @@ local function awardZombieKillToParty(rewardMoney, rewardXP)
 		return
 	end
 
-	local bonus = getRewardBonusMultiplier(count)
-	local moneyPerPlayer = math.max(0, math.floor((rewardMoney or 0) * bonus / count + 0.5))
-	local xpPerPlayer = math.max(0, math.floor((rewardXP or 0) * bonus / count + 0.5))
+	local bonusPerPlayer = tonumber(zombieConfig.PartyRewardBonusPerPlayer) or 0.1
+	local moneyPerPlayer = gameRules.GetPerPlayerReward(rewardMoney, count, bonusPerPlayer)
+	local xpPerPlayer = gameRules.GetPerPlayerReward(rewardXP, count, bonusPerPlayer)
 
 	for _, player in ipairs(players) do
 		addMoney(player, moneyPerPlayer)
@@ -780,14 +755,7 @@ local function getWaveTableEntry(waveNumber)
 end
 
 local function getDifficultyMultipliers()
-	local difficulty = getDifficultyConfig()
-	return {
-		health = tonumber(difficulty.EnemyHealthMultiplier) or 1,
-		damage = tonumber(difficulty.EnemyDamageMultiplier) or 1,
-		enemyCount = tonumber(difficulty.EnemyCountMultiplier) or 1,
-		reward = tonumber(difficulty.RewardMultiplier) or 1,
-		crystal = tonumber(difficulty.CrystalMultiplier) or 1,
-	}
+	return gameRules.GetDifficultyMultipliers(getDifficultyConfig())
 end
 
 local function getCurrentVariantWeights()
@@ -843,10 +811,6 @@ local function chooseVariantKey()
 	end
 
 	return "Walker"
-end
-
-local function getScaledValue(baseValue, scalePerStage, stage, multiplier)
-	return baseValue * (1 + scalePerStage * stage) * (multiplier or 1)
 end
 
 local function resolveKillerPlayer(humanoid)
@@ -1405,11 +1369,11 @@ local function createZombie(position, variantKey, stage)
 	variantKey = variantConfig[variantKey] and variantKey or "Walker"
 
 	local multipliers = getDifficultyMultipliers()
-	local health = getScaledValue(zombieConfig.BaseHealth, zombieConfig.HealthScalePerStage, stage, (variant.HealthMul or 1) * multipliers.health)
-	local moveSpeed = getScaledValue(zombieConfig.BaseMoveSpeed, zombieConfig.SpeedScalePerStage, stage, variant.MoveSpeedMul or 1)
-	local attackDamage = getScaledValue(zombieConfig.BaseAttackDamage, zombieConfig.DamageScalePerStage, stage, (variant.DamageMul or 1) * multipliers.damage)
-	local rewardMoney = getScaledValue(zombieConfig.BaseRewardMoney, zombieConfig.RewardScalePerStage, stage, (variant.RewardMul or 1) * multipliers.reward)
-	local rewardXP = getScaledValue(zombieConfig.BaseRewardXP, zombieConfig.RewardScalePerStage, stage, (variant.RewardMul or 1) * multipliers.reward)
+	local health = gameRules.GetScaledValue(zombieConfig.BaseHealth, zombieConfig.HealthScalePerStage, stage, (variant.HealthMul or 1) * multipliers.health)
+	local moveSpeed = gameRules.GetScaledValue(zombieConfig.BaseMoveSpeed, zombieConfig.SpeedScalePerStage, stage, variant.MoveSpeedMul or 1)
+	local attackDamage = gameRules.GetScaledValue(zombieConfig.BaseAttackDamage, zombieConfig.DamageScalePerStage, stage, (variant.DamageMul or 1) * multipliers.damage)
+	local rewardMoney = gameRules.GetScaledValue(zombieConfig.BaseRewardMoney, zombieConfig.RewardScalePerStage, stage, (variant.RewardMul or 1) * multipliers.reward)
+	local rewardXP = gameRules.GetScaledValue(zombieConfig.BaseRewardXP, zombieConfig.RewardScalePerStage, stage, (variant.RewardMul or 1) * multipliers.reward)
 	local attackRange = zombieConfig.BaseAttackRange
 	local attackCooldown = math.max(0.35, zombieConfig.BaseAttackCooldown / (1 + stage * 0.02))
 
@@ -2024,8 +1988,6 @@ local function endMatch(reason)
 		state.downed = false
 		state.deathToken += 1
 	end
-	table.clear(pendingProductRequests)
-
 	local currentRunId = matchState.runId
 	task.delay(returnDelay, function()
 		if matchState.runId ~= currentRunId then
@@ -2233,11 +2195,6 @@ local function promptRevivePurchase(player, kind)
 		})
 		return
 	end
-
-	pendingProductRequests[player.UserId] = {
-		kind = kind,
-		runId = matchState.runId,
-	}
 
 	local ok, err = pcall(function()
 		MarketplaceService:PromptProductPurchase(player, productId)
@@ -2463,7 +2420,6 @@ end
 local function cleanupPlayer(player)
 	removeDownedMarker(player)
 	playerStates[player] = nil
-	pendingProductRequests[player.UserId] = nil
 
 	if not matchState.ended and #Players:GetPlayers() > 0 and countAlivePlayers() <= 0 then
 		beginWipeWindow()
@@ -2573,39 +2529,15 @@ revivePurchaseEvent.OnServerEvent:Connect(function(player, action)
 	end
 end)
 
-MarketplaceService.ProcessReceipt = function(receiptInfo)
-	local purchaseId = tostring(receiptInfo.PurchaseId)
-	if processedReceipts[purchaseId] then
-		return Enum.ProductPurchaseDecision.PurchaseGranted
-	end
+receiptRouter.RegisterProduct(soloReviveProductId, function(_, player)
+	grantSoloRevive(player)
+	return true
+end)
 
-	local player = Players:GetPlayerByUserId(receiptInfo.PlayerId)
-	if not player then
-		return Enum.ProductPurchaseDecision.NotProcessedYet
-	end
-
-	local kind = nil
-	local pending = pendingProductRequests[receiptInfo.PlayerId]
-	if pending and pending.runId == matchState.runId then
-		kind = pending.kind
-	else
-		if receiptInfo.ProductId == soloReviveProductId then
-			kind = "solo"
-		elseif receiptInfo.ProductId == teamReviveProductId then
-			kind = "team"
-		end
-	end
-
-	if kind == "team" then
-		grantTeamRevive(player)
-	elseif kind == "solo" then
-		grantSoloRevive(player)
-	end
-
-	pendingProductRequests[receiptInfo.PlayerId] = nil
-	processedReceipts[purchaseId] = true
-	return Enum.ProductPurchaseDecision.PurchaseGranted
-end
+receiptRouter.RegisterProduct(teamReviveProductId, function(_, player)
+	grantTeamRevive(player)
+	return true
+end)
 
 ensureDefaultSpawnPoints()
 Players.CharacterAutoLoads = false

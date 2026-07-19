@@ -115,6 +115,9 @@ src/shared
 - Wave spawn cadence uses `Zombies.WaveSpawnSpeedMultiplier = 10` for the current high-density prototype test.
 - Mob load controls spawn `1`, `10`, or `100` moving Walker enemies and grant invisible damage protection. They are available in Studio and in published servers only to UserIds explicitly listed in `Debug.EnemySpawnerAuthorizedUserIds`.
 - Gunner magazines and reload are disabled through `Ammo.MagazinesEnabled = false`; ranged shots still use profession resources where configured.
+- Shared `GameRules` owns pure reward split, XP, scaling, respawn, meta cost, and ability-upgrade calculations used by runtime code.
+- Combat Studio automatically runs `GameRulesTests`; the current suite covers 26 assertions and reports through `Workspace.GameRulesTestsPassed`.
+- `ReceiptRouter` is the sole owner of `MarketplaceService.ProcessReceipt`; revive products register handlers instead of replacing the callback.
 
 Важно: часть docs и task board устарели. Актуальный дизайн теперь в `GDD_V2.md`.
 
