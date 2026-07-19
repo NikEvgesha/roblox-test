@@ -112,6 +112,9 @@ src/shared
 - Debug all-weapons spawn is disabled; profession starter weapons and shop purchases now matter in prototype tests.
 - Published `Lobby -> Combat -> Lobby` routing was verified in the Roblox client on `2026-07-19`.
 - Wave completion prunes structurally invalid zombie states so detached Humanoids cannot leave `1 alive` forever.
+- Wave spawn cadence uses `Zombies.WaveSpawnSpeedMultiplier = 10` for the current high-density prototype test.
+- Studio-only mob load controls spawn `1`, `10`, or `100` moving Walker enemies and grant the tester invisible damage protection.
+- Gunner magazines and reload are disabled through `Ammo.MagazinesEnabled = false`; ranged shots still use profession resources where configured.
 
 Важно: часть docs и task board устарели. Актуальный дизайн теперь в `GDD_V2.md`.
 
@@ -153,6 +156,7 @@ src/shared
 - stance переключает `Pistol` и `Rifle`;
 - `Pistol` стреляет без расхода маны;
 - `Rifle` тратит `3 Mana` за выстрел;
+- патроны, магазины и перезарядка в текущем прототипе отключены;
 - passives: pistol damage, rifle damage, fire rate;
 - actives: `Piercing Shot`, `Grenade`;
 - aura отсутствует.

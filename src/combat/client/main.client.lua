@@ -70,6 +70,7 @@ ammoLabel.Parent = gui
 local ammoCorner = Instance.new("UICorner")
 ammoCorner.CornerRadius = UDim.new(0, 8)
 ammoCorner.Parent = ammoLabel
+ammoLabel.Visible = (combatConfig.Ammo or {}).MagazinesEnabled == true
 
 local weaponLabel = Instance.new("TextLabel")
 weaponLabel.Name = "WeaponLabel"
@@ -97,8 +98,13 @@ controlsLabel.TextColor3 = Color3.fromRGB(190, 190, 190)
 controlsLabel.Font = Enum.Font.Gotham
 controlsLabel.TextSize = 14
 controlsLabel.TextXAlignment = Enum.TextXAlignment.Left
-controlsLabel.Text = "LMB fire/attack | RMB aim | R reload | E interact | B open shop"
+controlsLabel.Text = "LMB fire/attack | RMB aim | E interact | B open shop"
 controlsLabel.Parent = gui
+
+if not (combatConfig.Ammo or {}).MagazinesEnabled then
+	weaponLabel.Position = UDim2.fromOffset(18, 58)
+	controlsLabel.Position = UDim2.fromOffset(18, 91)
+end
 
 local survivalStatusLabel = Instance.new("TextLabel")
 survivalStatusLabel.Name = "SurvivalStatusLabel"
@@ -1679,13 +1685,17 @@ local function refreshCombatHud()
 	weaponLabel.Text = ("Weapon: %s"):format(prettyName)
 
 	if weapon and weapon.Category == "Ranged" then
-		local suffix = isReloading and " (reloading)" or ""
-		if ammoReserve < 0 then
-			ammoLabel.Text = ("Ammo: %d / INF%s"):format(ammoMag, suffix)
+		if (combatConfig.Ammo or {}).MagazinesEnabled then
+			local suffix = isReloading and " (reloading)" or ""
+			if ammoReserve < 0 then
+				ammoLabel.Text = ("Ammo: %d / INF%s"):format(ammoMag, suffix)
+			else
+				ammoLabel.Text = ("Ammo: %d / %d%s"):format(ammoMag, ammoReserve, suffix)
+			end
+			controlsLabel.Text = "LMB fire | RMB aim | R reload | E interact | B open shop"
 		else
-			ammoLabel.Text = ("Ammo: %d / %d%s"):format(ammoMag, ammoReserve, suffix)
+			controlsLabel.Text = "LMB fire | RMB aim | E interact | B open shop"
 		end
-		controlsLabel.Text = "LMB fire | RMB aim | R reload | E interact | B open shop"
 	elseif weapon and weapon.Category == "Melee" then
 		ammoLabel.Text = "Ammo: --"
 		controlsLabel.Text = "LMB melee attack | RMB camera lock | E interact | B open shop"
@@ -2194,7 +2204,10 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 		return
 	end
 
-	if input.KeyCode == Enum.KeyCode.R and weapon.Category == "Ranged" then
+	if (combatConfig.Ammo or {}).MagazinesEnabled
+		and input.KeyCode == Enum.KeyCode.R
+		and weapon.Category == "Ranged"
+	then
 		playWeaponReloadAnimation(weaponKey)
 		combatActionEvent:FireServer("reload")
 	end

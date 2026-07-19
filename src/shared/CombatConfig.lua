@@ -202,6 +202,7 @@ return {
 		BaseMaxAlive = 10,
 		BaseSpawnInterval = 3.8,
 		MinSpawnInterval = 1.1,
+		WaveSpawnSpeedMultiplier = 10,
 		MaxAlivePerStage = 2,
 
 		BaseHealth = 100,
@@ -382,6 +383,7 @@ return {
 	},
 
 	Ammo = {
+		MagazinesEnabled = false,
 		InfiniteReserve = true,
 		SpawnPickups = false,
 	},
@@ -415,6 +417,7 @@ return {
 
 	Debug = {
 		GrantAllWeaponsOnSpawn = false,
+		EnableStudioEnemySpawner = true,
 	},
 
 	DefaultOwnedWeapons = { "Bulava" },

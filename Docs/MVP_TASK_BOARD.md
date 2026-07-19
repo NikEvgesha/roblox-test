@@ -31,6 +31,7 @@ Last verified: `2026-07-19`
 | B-4 | Fixed run target | Shared | Done | 10-wave cube test; 100-wave long target |
 | B-5 | Player-count and difficulty scaling for 1-8 | Assistant | Done | Party income/count and four difficulty tiers implemented |
 | B-6 | Complete 10-wave end-to-end playtest | Shared | In Progress | Ghost-enemy stall fixed locally; published retest pending |
+| B-7 | Accelerate prototype wave spawning | Assistant | Done | Configurable `x10` spawn cadence enabled |
 
 ## Epic C - Professions And Abilities
 
@@ -71,6 +72,7 @@ Last verified: `2026-07-19`
 | E-7 | Split oversized runtime scripts | Assistant | Backlog | Preserve behavior while extracting services |
 | E-8 | Remove unused enemy-pack overhead | Shared | Backlog | You select retained assets; Assistant cleans hierarchy |
 | E-9 | Profile target combat wave | Assistant | Backlog | Re-run scene and MicroProfiler checks after cleanup |
+| E-10 | Add Studio mob load controls | Shared | In Progress | Buttons for `1/10/100`; owner performance-limit test pending |
 
 ## Epic F - Tooling And Release
 

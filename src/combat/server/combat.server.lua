@@ -105,6 +105,7 @@ if not pickupFolder then
 end
 
 local ammoConfig = combatConfig.Ammo or {}
+local magazinesEnabled = ammoConfig.MagazinesEnabled == true
 local infiniteReserveAmmo = ammoConfig.InfiniteReserve ~= false
 local spawnAmmoPickups = ammoConfig.SpawnPickups == true
 
@@ -548,7 +549,7 @@ local function getEquippedWeaponKey(player)
 end
 
 local function getAmmoStateForWeapon(playerState, weaponKey)
-	if not playerState or not weaponKey then
+	if not magazinesEnabled or not playerState or not weaponKey then
 		return nil
 	end
 
@@ -578,7 +579,8 @@ local function sendCombatState(player)
 
 	local equippedWeaponKey = getEquippedWeaponKey(player)
 	local payload = {
-		reloading = playerState.reloading,
+		usesAmmo = magazinesEnabled,
+		reloading = magazinesEnabled and playerState.reloading or false,
 		equippedWeaponKey = equippedWeaponKey or "",
 		equippedToolName = equippedWeaponKey and weaponsByKey[equippedWeaponKey].ToolName or "",
 		mag = 0,
@@ -586,7 +588,7 @@ local function sendCombatState(player)
 		fireRateMultiplier = equippedWeaponKey and abilityService.GetFireRateMultiplier(player, equippedWeaponKey) or 1,
 	}
 
-	if equippedWeaponKey then
+	if magazinesEnabled and equippedWeaponKey then
 		local weapon = weaponsByKey[equippedWeaponKey]
 		if weapon and weapon.Category == "Ranged" then
 			local ammoState = getAmmoStateForWeapon(playerState, equippedWeaponKey)
@@ -1070,16 +1072,19 @@ local function handleFire(player, payload)
 		return
 	end
 
-	local ammoState = getAmmoStateForWeapon(playerState, weaponKey)
-	if not ammoState then
-		return
-	end
-
-	if ammoState.mag <= 0 then
-		if infiniteReserveAmmo or ammoState.reserve > 0 then
-			handleReload(player)
+	local ammoState = nil
+	if magazinesEnabled then
+		ammoState = getAmmoStateForWeapon(playerState, weaponKey)
+		if not ammoState then
+			return
 		end
-		return
+
+		if ammoState.mag <= 0 then
+			if infiniteReserveAmmo or ammoState.reserve > 0 then
+				handleReload(player)
+			end
+			return
+		end
 	end
 
 	if typeof(payload) ~= "table" then
@@ -1143,8 +1148,10 @@ local function handleFire(player, payload)
 	end
 
 	playerState.lastShotAt = os.clock()
-	ammoState.mag -= 1
-	sendCombatState(player)
+	if magazinesEnabled then
+		ammoState.mag -= 1
+		sendCombatState(player)
+	end
 	makeMuzzleFlash(tracerOrigin, unitDirection)
 	playHandleSound(player, weaponKey, "ShotSound", tonumber(weapon.ShotSoundPlaybackSpeed) or 1)
 	if type(weapon.BoltSoundId) == "string" and weapon.BoltSoundId ~= "" then
@@ -1190,12 +1197,16 @@ local function handleFire(player, payload)
 		})
 	end
 
-	if ammoState.mag <= 0 and (infiniteReserveAmmo or ammoState.reserve > 0) then
+	if magazinesEnabled and ammoState.mag <= 0 and (infiniteReserveAmmo or ammoState.reserve > 0) then
 		handleReload(player)
 	end
 end
 
 handleReload = function(player)
+	if not magazinesEnabled then
+		return
+	end
+
 	local playerState = stateByPlayer[player]
 	if not playerState or playerState.reloading then
 		return

@@ -21,6 +21,7 @@ local waveTable = zombieConfig.WaveTable or {}
 
 local SURVIVAL_EVENT_NAME = "SurvivalEvent"
 local REVIVE_PURCHASE_EVENT_NAME = "RevivePurchaseEvent"
+local DEBUG_ENEMY_SPAWN_EVENT_NAME = "DebugEnemySpawnEvent"
 local ZOMBIES_FOLDER_NAME = "Zombies"
 local SPAWN_POINTS_FOLDER_NAME = "ZombieSpawnPoints"
 local DOWNED_FOLDER_NAME = "DownedPlayers"
@@ -47,6 +48,7 @@ end
 
 local survivalEvent = ensureRemoteEvent(SURVIVAL_EVENT_NAME)
 local revivePurchaseEvent = ensureRemoteEvent(REVIVE_PURCHASE_EVENT_NAME)
+local debugEnemySpawnEvent = ensureRemoteEvent(DEBUG_ENEMY_SPAWN_EVENT_NAME)
 
 local function sendSurvivalEventToPlayer(player, payload)
 	if player and player.Parent then
@@ -642,6 +644,22 @@ local function safeLoadCharacter(player)
 	pcall(function()
 		player:LoadCharacter()
 	end)
+end
+
+local function ensureStudioLoadTestProtection(character)
+	local debugConfig = combatConfig.Debug or {}
+	if not RunService:IsStudio() or debugConfig.EnableStudioEnemySpawner ~= true or not character then
+		return
+	end
+
+	if character:FindFirstChild("DebugLoadTestForceField") then
+		return
+	end
+
+	local forceField = Instance.new("ForceField")
+	forceField.Name = "DebugLoadTestForceField"
+	forceField.Visible = false
+	forceField.Parent = character
 end
 
 local function placeCharacterAtStart(character)
@@ -1759,7 +1777,8 @@ local function getWaveSpawnInterval(waveNumber)
 	if minSpawnInterval == nil then
 		minSpawnInterval = tonumber(zombieConfig.MinSpawnInterval) or 1.1
 	end
-	return math.max(minSpawnInterval, interval)
+	local speedMultiplier = math.max(0.01, tonumber(zombieConfig.WaveSpawnSpeedMultiplier) or 1)
+	return math.max(minSpawnInterval, interval) / speedMultiplier
 end
 
 local waveDebugState = {}
@@ -2359,6 +2378,7 @@ local function onCharacterAdded(player, character)
 	state.downed = false
 	state.deathToken += 1
 	removeDownedMarker(player)
+	ensureStudioLoadTestProtection(character)
 
 	if wipeState.active and countAlivePlayers() > 0 then
 		wipeState.active = false
@@ -2476,6 +2496,50 @@ local function spawnZombieFromPoint()
 	matchState.waveSpawnsRemaining = math.max(0, matchState.waveSpawnsRemaining - 1)
 	createZombie(point.Position, variantKey, stage)
 end
+
+local debugSpawnCounts = { [1] = true, [10] = true, [100] = true }
+local debugSpawnCooldownByUserId = {}
+
+debugEnemySpawnEvent.OnServerEvent:Connect(function(player, requestedCount)
+	local debugConfig = combatConfig.Debug or {}
+	if not RunService:IsStudio() or debugConfig.EnableStudioEnemySpawner ~= true then
+		return
+	end
+
+	local count = math.floor(tonumber(requestedCount) or 0)
+	if not debugSpawnCounts[count] then
+		return
+	end
+
+	local now = os.clock()
+	if now - (debugSpawnCooldownByUserId[player.UserId] or 0) < 0.25 then
+		return
+	end
+	debugSpawnCooldownByUserId[player.UserId] = now
+
+	ensureStudioLoadTestProtection(player.Character)
+
+	task.spawn(function()
+		local spawned = 0
+		local stage = getDifficultyStageForWave(math.max(1, matchState.waveNumber))
+		for index = 1, count do
+			local point = getRandomSpawnPoint()
+			if point then
+				createZombie(point.Position, "Walker", stage)
+				spawned += 1
+			end
+
+			if index % 10 == 0 then
+				task.wait()
+			end
+		end
+
+		debugEnemySpawnEvent:FireClient(player, {
+			requested = count,
+			spawned = spawned,
+		})
+	end)
+end)
 
 revivePurchaseEvent.OnServerEvent:Connect(function(player, action)
 	if action == "request_solo" then
