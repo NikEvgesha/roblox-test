@@ -68,8 +68,8 @@ Last verified: `2026-07-20`
 | E-3 | Final UI visual pass | You | Backlog | Starts after UX stabilizes |
 | E-4 | Run local smoke tests after milestones | Assistant | In Progress | Lobby and Combat boot cleanly |
 | E-5 | Spectator/free-fly while dead | Assistant | Done | Camera and movement prototype verified manually |
-| E-6 | Add automated Luau tests | Assistant | Done | Rules 26; waves 19; enemy runtime 18; enemy factory 41; revive runtime 47 |
-| E-7 | Split oversized runtime scripts | Assistant | In Progress | Wave, enemy, factory, and revive services extracted; client controllers remain |
+| E-6 | Add automated Luau tests | Assistant | Done | 173 assertions: rules 26; waves 19; enemy runtime 18; enemy factory 41; revive 47; spectator 22 |
+| E-7 | Split oversized runtime scripts | Assistant | In Progress | Server services and spectator controller extracted; weapon/input and UI controllers remain |
 | E-8 | Remove unused enemy-pack overhead | Shared | Backlog | You select retained assets; Assistant cleans hierarchy |
 | E-9 | Profile target combat wave | Shared | In Progress | Owner load-test controls work; record the practical mob/FPS limit |
 | E-10 | Add authorized mob load controls | Shared | Done | Studio and owner-only published buttons for `1/10/100` verified by owner |

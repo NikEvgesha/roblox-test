@@ -125,6 +125,8 @@ src/shared
 - Combat Studio automatically runs `EnemyFactoryTests`; the current suite covers 41 assertions and reports through `Workspace.EnemyFactoryTestsPassed`.
 - Server `ReviveRuntime` owns player life/downed state, markers, free-respawn timers, wipe-window timing, teammate revive, paid grant policy, and character death wiring.
 - Combat Studio automatically runs `ReviveRuntimeTests`; the current suite covers 47 assertions and reports through `Workspace.ReviveRuntimeTestsPassed`.
+- Client `SpectatorController` owns downed/free-fly state, view-relative movement, RMB camera look, cursor policy, and gameplay-camera restoration.
+- Combat Studio automatically runs `SpectatorControllerTests`; the current suite covers 22 assertions and reports through `Workspace.SpectatorControllerTestsPassed`.
 - `ReceiptRouter` is the sole owner of `MarketplaceService.ProcessReceipt`; revive products register handlers instead of replacing the callback.
 
 Важно: часть docs и task board устарели. Актуальный дизайн теперь в `GDD_V2.md`.
