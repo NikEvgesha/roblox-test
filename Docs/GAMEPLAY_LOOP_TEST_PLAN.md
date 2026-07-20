@@ -26,7 +26,7 @@ Validate that the wave survival loop remains stable after each task and does not
 
 ## Automated Studio Tests
 
-- Combat Studio runs eight automated suites: five server services plus spectator, weapon, and input controllers.
+- Combat Studio runs nine automated suites: five server services plus spectator, weapon, input, and aim controllers.
 - Passing state: all corresponding `Workspace.*TestsPassed` attributes are `true`.
 - `GameRulesTests`: `26` assertions for party rewards, XP progression, difficulty/stat scaling, respawn timing, meta costs, and ability upgrades.
 - `WaveDirectorTests`: `19` assertions for wave lookup, boss cadence, spawn budgets, party/difficulty scaling, alive caps, spawn intervals, and variant weights.
@@ -36,10 +36,12 @@ Validate that the wave survival loop remains stable after each task and does not
 - `SpectatorControllerTests`: `22` assertions for downed transitions, RMB-look cursor state, view-relative movement, and gameplay-camera restoration.
 - `WeaponControllerTests`: `31` assertions for held fire, cadence multipliers, reload state, ranged dispatch, melee dispatch, and blocking states.
 - `CombatInputControllerTests`: `25` assertions for LMB/RMB routing, shop/skills shortcuts, reload, blocking UI, and spectator forwarding.
+- `AimControllerTests`: `26` assertions for aim state, strict crosshair visibility, nearest-target filtering, auto-lock, UnitRay/raycast fallback, cursor state, and blocking transitions.
 - Play Mode baseline: Medium solo Wave 1 reports budget `8`, alive cap `14`, spawn interval `0.29`, and creates `8` enemies.
 - Factory baseline: every Wave 1 enemy has a root, Humanoid, and health bar; killing all enemies advances to `Intermission`.
-- Revive baseline: solo death creates one downed marker and changes `WaveState` to `WipeWindow`; a fresh Combat boot reports all eight suites passing.
+- Revive baseline: solo death creates one downed marker and changes `WaveState` to `WipeWindow`; a fresh Combat boot reports all nine suites passing.
 - Spectator integration baseline: a `respawn` event switches to `Scriptable` camera and shows status; `respawn_clear` restores `Custom` camera with the local `Humanoid` as subject.
+- Aim integration baseline: equipped R15 ranged combat creates and enables `RangedRightArmIK` with target/pole parts; spectator mode disables IK and crosshair, and revive restores the gameplay camera and crosshair.
 - Ghost-state baseline: destroying one live enemy root and killing the remaining wave enemies produces `AliveZombies == 0` and advances to `Intermission`.
 
 ## Regression Matrix
