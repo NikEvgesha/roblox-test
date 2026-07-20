@@ -98,8 +98,10 @@ function WaveDirector:GetVariantWeights(waveNumber)
 	end
 
 	local mergedWeights = {}
-	for variantKey, weight in pairs(chosenWeights or { Walker = 100 }) do
-		mergedWeights[variantKey] = weight
+	if self.config.UseOnlyIntroducedVariants ~= true then
+		for variantKey, weight in pairs(chosenWeights or { Walker = 100 }) do
+			mergedWeights[variantKey] = weight
+		end
 	end
 	for _, introduction in ipairs(self.config.VariantIntroductions or {}) do
 		if wave >= normalizeWave(introduction.MinWave) then

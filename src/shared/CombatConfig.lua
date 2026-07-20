@@ -100,7 +100,7 @@ local config = {
 		EnemiesPerWaveStep = 1,
 		BossWaveInterval = 10,
 		BossAdditionalEnemies = 4,
-		BossVariantKey = "BossBrute",
+		BossVariantKey = "BossStoneTitan",
 		Difficulties = {
 			Easy = {
 				DisplayName = "Easy",
@@ -999,6 +999,7 @@ config.Zombies.VariantIntroductions = {
 	{ MinWave = 50, Weights = { StormShard = 6 } },
 }
 
+config.Zombies.UseOnlyIntroducedVariants = true
 config.Zombies.AllBossesWave = 50
 config.Zombies.WaveEnemyCountCurve = {
 	StartWave = 1,
@@ -1057,7 +1058,7 @@ config.Zombies.BossAbilities = {
 		TelegraphSeconds = 1.5,
 		PortalRadius = 3.5,
 		SummonCount = 4,
-		SummonVariants = { "Needleling", "ThornRunner", "BoneSkitter", "Shardling" },
+		SummonVariants = { "Needleling", "ThornRunner", "BoneSkitter", "Shellback" },
 	},
 }
 

@@ -32,10 +32,11 @@ Last updated: `2026-07-20`
 | Done | Evaluate enemy animation examples | Shared | Owner accepted the client-side procedural direction for continued work |
 | Done | Review expanded enemy roster | You | Owner accepted the 20 new mobs and four bosses for continued use |
 | Done | Configure 50-wave density curve | Assistant | Medium solo scales 100 -> 500 mobs, cap stays at 500, and all four bosses spawn on Wave 50 |
-| P1 | Publish 50-wave balance and spawn markers | You | Publish Combat after reviewing the eight radius-150 spawn points in Studio |
+| Done | Remove legacy enemy assets | Assistant | Old Toolbox/examples removed; retained templates live under server-only storage and only the new roster enters waves |
+| P1 | Publish Combat balance and enemy cleanup | You | Publish Combat after reviewing the radius-150 spawn points and hidden 24-template server library |
 | Done | Establish mob performance baseline | Shared | Owner reports stable play at `500` active mobs; higher counts are optional stress territory |
-| P2 | Select retained enemy/weapon assets | You | Explicit keep/remove list for Combat hierarchy |
-| P2 | Clean and profile Combat assets | Assistant | Unused pack content removed; scene metrics recorded |
+| P2 | Select retained weapon assets | You | Explicit keep/remove list for the remaining Combat weapon hierarchy |
+| P2 | Clean and profile remaining Combat assets | Assistant | Unused non-enemy pack content removed; scene metrics recorded |
 
 ## Ownership
 

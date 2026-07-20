@@ -34,7 +34,7 @@ local frame = Instance.new("Frame")
 frame.Name = "Panel"
 frame.AnchorPoint = Vector2.new(1, 0)
 frame.Position = UDim2.new(1, -18, 0, 190)
-frame.Size = UDim2.fromOffset(254, 390)
+frame.Size = UDim2.fromOffset(254, 310)
 frame.BackgroundColor3 = Color3.fromRGB(22, 25, 29)
 frame.BackgroundTransparency = 0.08
 frame.BorderSizePixel = 0
@@ -80,36 +80,16 @@ buttonLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 buttonLayout.Padding = UDim.new(0, 7)
 buttonLayout.Parent = buttonRow
 
-local previewRow = Instance.new("Frame")
-previewRow.Name = "PreviewRow"
-previewRow.Position = UDim2.fromOffset(12, 102)
-previewRow.Size = UDim2.new(1, -24, 0, 34)
-previewRow.BackgroundTransparency = 1
-previewRow.Parent = frame
-
-local previewLayout = Instance.new("UIListLayout")
-previewLayout.FillDirection = Enum.FillDirection.Horizontal
-previewLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-previewLayout.Padding = UDim.new(0, 7)
-previewLayout.Parent = previewRow
-
-local comparisonRow = Instance.new("Frame")
-comparisonRow.Name = "ComparisonRow"
-comparisonRow.Position = UDim2.fromOffset(12, 142)
-comparisonRow.Size = UDim2.new(1, -24, 0, 34)
-comparisonRow.BackgroundTransparency = 1
-comparisonRow.Parent = frame
-
 local rosterRow = Instance.new("Frame")
 rosterRow.Name = "RosterRow"
-rosterRow.Position = UDim2.fromOffset(12, 182)
+rosterRow.Position = UDim2.fromOffset(12, 102)
 rosterRow.Size = UDim2.new(1, -24, 0, 34)
 rosterRow.BackgroundTransparency = 1
 rosterRow.Parent = frame
 
 local bossLabel = Instance.new("TextLabel")
 bossLabel.Name = "BossLabel"
-bossLabel.Position = UDim2.fromOffset(12, 222)
+bossLabel.Position = UDim2.fromOffset(12, 142)
 bossLabel.Size = UDim2.new(1, -24, 0, 18)
 bossLabel.BackgroundTransparency = 1
 bossLabel.Font = Enum.Font.GothamBold
@@ -121,14 +101,14 @@ bossLabel.Parent = frame
 
 local bossRowOne = Instance.new("Frame")
 bossRowOne.Name = "BossRowOne"
-bossRowOne.Position = UDim2.fromOffset(12, 246)
+bossRowOne.Position = UDim2.fromOffset(12, 166)
 bossRowOne.Size = UDim2.new(1, -24, 0, 34)
 bossRowOne.BackgroundTransparency = 1
 bossRowOne.Parent = frame
 
 local bossRowTwo = bossRowOne:Clone()
 bossRowTwo.Name = "BossRowTwo"
-bossRowTwo.Position = UDim2.fromOffset(12, 286)
+bossRowTwo.Position = UDim2.fromOffset(12, 206)
 bossRowTwo.Parent = frame
 
 for _, row in ipairs({ bossRowOne, bossRowTwo }) do
@@ -141,11 +121,11 @@ end
 
 local statusLabel = Instance.new("TextLabel")
 statusLabel.Name = "StatusLabel"
-statusLabel.Position = UDim2.fromOffset(12, 330)
+statusLabel.Position = UDim2.fromOffset(12, 250)
 statusLabel.Size = UDim2.new(1, -24, 0, 48)
 statusLabel.BackgroundTransparency = 1
 statusLabel.Font = Enum.Font.Gotham
-statusLabel.Text = "Adds moving Walkers. Test damage protection is on."
+statusLabel.Text = "Adds moving roster mobs. Test damage protection is on."
 statusLabel.TextColor3 = Color3.fromRGB(158, 168, 178)
 statusLabel.TextSize = 12
 statusLabel.TextWrapped = true
@@ -192,7 +172,7 @@ local function createPreviewButton(label, variantKey, color, parent, width)
 	button.Text = label
 	button.TextColor3 = Color3.fromRGB(245, 248, 246)
 	button.TextSize = 12
-	button.Parent = parent or previewRow
+	button.Parent = parent or rosterRow
 
 	local corner = Instance.new("UICorner")
 	corner.CornerRadius = UDim.new(0, 7)
@@ -202,11 +182,6 @@ local function createPreviewButton(label, variantKey, color, parent, width)
 		spawnEvent:FireServer({ count = 1, variant = variantKey })
 	end)
 end
-
-createPreviewButton("Shardling", "Shardling", Color3.fromRGB(38, 133, 146))
-createPreviewButton("Moss Brute", "MossBrute", Color3.fromRGB(74, 112, 62))
-createPreviewButton("Ember Wisp", "EmberWisp", Color3.fromRGB(177, 83, 42))
-createPreviewButton("Animated Troll (tracks)", "AnimatedTroll", Color3.fromRGB(98, 78, 134), comparisonRow, 230)
 
 local mobPreviewOrder = combatConfig.Zombies.DebugMobPreviewOrder or {}
 local mobPreviewIndex = 0
@@ -250,7 +225,7 @@ spawnEvent.OnClientEvent:Connect(function(result)
 	statusLabel.Text = ("Spawned %d / %d %s."):format(
 		math.max(0, math.floor(tonumber(result.spawned) or 0)),
 		math.max(0, math.floor(tonumber(result.requested) or 0)),
-		tostring(result.variant or "Walker")
+		tostring(result.variant or "Needleling")
 	)
 end)
 

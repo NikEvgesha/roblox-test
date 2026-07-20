@@ -375,7 +375,7 @@ function BossAbilityRuntime:_castSummonBrood(state, ability)
 	local telegraphSeconds = tonumber(ability.TelegraphSeconds) or 1.5
 	local count = math.max(1, math.floor(tonumber(ability.SummonCount) or 3))
 	local portalRadius = tonumber(ability.PortalRadius) or 3.5
-	local variants = ability.SummonVariants or { "Shardling" }
+	local variants = ability.SummonVariants or { "Needleling" }
 	local positions = {}
 
 	for index = 1, count do

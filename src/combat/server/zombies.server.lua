@@ -1,6 +1,7 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+local ServerStorage = game:GetService("ServerStorage")
 local Workspace = game:GetService("Workspace")
 local Debris = game:GetService("Debris")
 local MarketplaceService = game:GetService("MarketplaceService")
@@ -657,7 +658,7 @@ local function chooseVariantKey()
 	end
 
 	if total <= 0 then
-		return "Walker"
+		return "Needleling"
 	end
 
 	local roll = math.random() * total
@@ -672,7 +673,7 @@ local function chooseVariantKey()
 		end
 	end
 
-	return "Walker"
+	return "Needleling"
 end
 
 local function resolveKillerPlayer(humanoid)
@@ -832,12 +833,20 @@ local function sanitizeTemplateZombieContent(model)
 	end
 end
 
+local templateAssetsFolder = ServerStorage:FindFirstChild("EnemyTemplates")
+if not templateAssetsFolder then
+	local workspaceEnemyFolder = Workspace:FindFirstChild("Enemy")
+	templateAssetsFolder = workspaceEnemyFolder and workspaceEnemyFolder:FindFirstChild("CodexMobCollection")
+end
+
 enemyFactory = EnemyFactory.new({
 	config = zombieConfig,
 	variants = variantConfig,
 	enemyFolder = zombiesFolder,
 	spawnPointsFolder = spawnPointsFolder,
 	downedFolder = downedFolder,
+	templateSearchRoot = ServerStorage,
+	templateAssetsFolder = templateAssetsFolder,
 	getDifficultyMultipliers = getDifficultyMultipliers,
 	sanitizeTemplateContent = sanitizeTemplateZombieContent,
 	onCreated = function(model, state)
@@ -1301,7 +1310,7 @@ local function spawnZombieFromPoint()
 		if variantConfig[configuredBoss] then
 			variantKey = configuredBoss
 		else
-			variantKey = "Bomber"
+			variantKey = "BossStoneTitan"
 		end
 		matchState.waveBossSpawnsRemaining -= 1
 	else
@@ -1320,7 +1329,7 @@ debugEnemySpawnEvent.OnServerEvent:Connect(function(player, requestedCount)
 		return
 	end
 
-	local variantKey = "Walker"
+	local variantKey = "Needleling"
 	local countValue = requestedCount
 	if typeof(requestedCount) == "table" then
 		countValue = requestedCount.count
@@ -1333,7 +1342,7 @@ debugEnemySpawnEvent.OnServerEvent:Connect(function(player, requestedCount)
 	if not debugSpawnCounts[count] then
 		return
 	end
-	if variantKey ~= "Walker" then
+	if variantKey ~= "Needleling" then
 		count = 1
 	end
 

@@ -73,10 +73,10 @@ Last verified: `2026-07-20`
 | E-5 | Spectator/free-fly while dead | Assistant | Done | Camera and movement prototype verified manually |
 | E-6 | Add automated Luau tests | Assistant | Done | 400 assertions across fifteen server/client suites |
 | E-7 | Split oversized runtime scripts | Assistant | Done | Combat entrypoint is 173 lines; HUD state and weapon animation controllers extracted |
-| E-8 | Remove unused enemy-pack overhead | Shared | Backlog | You select retained assets; Assistant cleans hierarchy |
+| E-8 | Remove unused enemy-pack overhead | Shared | Done | Legacy pack/examples removed; 24 retained templates moved to server-only storage |
 | E-9 | Profile target combat wave | Shared | Done | Owner reports stable play at `500` active mobs; higher counts remain possible |
 | E-10 | Add authorized mob load controls | Shared | Done | Studio and owner-only published buttons for `1/10/100` verified by owner |
-| E-11 | Evaluate enemy animation direction | Shared | Done | Owner accepted the client-side procedural direction as suitable for continued roster work |
+| E-11 | Evaluate enemy animation direction | Shared | Done | Owner accepted procedural animation; temporary comparison assets were removed |
 | E-12 | Review expanded enemy and boss visuals | You | Done | Owner accepted the 20-mob roster and four bosses for continued use |
 
 ## Epic F - Tooling And Release

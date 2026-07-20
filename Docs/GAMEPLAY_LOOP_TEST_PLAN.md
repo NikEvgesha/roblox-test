@@ -23,7 +23,7 @@ Validate that the wave survival loop remains stable after each task and does not
 | SMK-13 | Ghost enemy cleanup | Detach a living enemy Humanoid after all spawns finish | Invalid state is pruned and the wave resolves |
 | SMK-14 | Authorized mob load controls | Click `Spawn 1`, `Spawn 10`, and `Spawn 100` in Combat Studio or as an authorized published user | Requested moving enemies spawn; tester remains alive; unauthorized users have no panel |
 | SMK-15 | Gunner unlimited ammunition | Fire ranged weapons continuously and press `R` | Shots do not stop, no ammo HUD appears, and reload does not run |
-| SMK-16 | Enemy animation comparison | Use the `Shardling`, `Moss Brute`, `Ember Wisp`, and `Animated Troll (tracks)` debug buttons | Each template spawns and moves; procedural limbs visibly cycle on the client without whole-root ground bob, attacks animate near the player, and Troll plays its walk/attack AnimationTracks |
+| SMK-16 | Hidden enemy templates | Inspect Edit/Play hierarchy and start Wave 1 | Retained templates live only under `ServerStorage.EnemyTemplates`; no enemy gallery is visible in `Workspace`, while spawned clones remain visible and animated |
 | SMK-17 | Expanded enemy roster | Click `Next roster mob` twenty times | All 20 configured variants spawn their dedicated templates, animate, and never fall back to cube enemies |
 | SMK-18 | Boss ability telegraphs | Spawn each of the four bosses and remain in range through one cooldown | Rock circles/stun, expanding shockwave, flame lanes, and brood portals appear before their effects; cleanup restores player movement and removes telegraphs |
 | SMK-19 | 50-wave density curve | Inspect Wave 1 and reach/force Wave 50 | Medium solo starts at 100 normal mobs, ends at 500 normal mobs, and never exceeds 500 simultaneously active enemies |
@@ -49,6 +49,7 @@ Validate that the wave survival loop remains stable after each task and does not
 - `WeaponAnimationControllerTests`: `17` assertions for track caching, ranged speed, melee cooldown scaling, scheduled stops, and invalid definitions.
 - `ProceduralEnemyAnimatorTests`: `25` assertions for style capture, 30 Hz throttling, locomotion transforms, attack lunges, orbit offsets, and reset behavior.
 - Play Mode baseline (`2026-07-20`): Medium solo Wave 1 reports budget `100`, alive cap `100`, spawn interval `0.29`, and all eight spawn markers are radius `150`; `83` simultaneous enemies were observed during the smoke run before stopping.
+- Hidden-template baseline (`2026-07-20`): Wave 1 spawned `100` visible `Zombie_Needleling` clones with no fallback models; clients saw zero `ServerStorage` children and no `Workspace.Enemy` gallery.
 - Factory baseline: every Wave 1 enemy has a root, Humanoid, and health bar; killing all enemies advances to `Intermission`.
 - Revive baseline: solo death creates one downed marker and changes `WaveState` to `WipeWindow`; a fresh Combat boot reports all fifteen suites passing.
 - Spectator integration baseline: a `respawn` event switches to `Scriptable` camera and shows status; `respawn_clear` restores `Custom` camera with the local `Humanoid` as subject.
