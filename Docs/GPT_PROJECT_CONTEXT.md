@@ -119,6 +119,8 @@ src/shared
 - Combat Studio automatically runs `GameRulesTests`; the current suite covers 26 assertions and reports through `Workspace.GameRulesTestsPassed`.
 - Server `WaveDirector` owns wave-table selection, boss detection, spawn budgets, alive caps, spawn cadence, and enemy variant weights.
 - Combat Studio automatically runs `WaveDirectorTests`; the current suite covers 19 assertions and reports through `Workspace.WaveDirectorTestsPassed`.
+- Server `EnemyRuntime` owns the enemy registry, alive-state validation, ghost-state pruning, nearest-target lookup, spawn-point selection, and active-enemy iteration.
+- Combat Studio automatically runs `EnemyRuntimeTests`; the current suite covers 18 assertions and reports through `Workspace.EnemyRuntimeTestsPassed`.
 - `ReceiptRouter` is the sole owner of `MarketplaceService.ProcessReceipt`; revive products register handlers instead of replacing the callback.
 
 Важно: часть docs и task board устарели. Актуальный дизайн теперь в `GDD_V2.md`.

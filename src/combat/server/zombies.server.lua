@@ -12,6 +12,7 @@ local combatConfig = require(sharedFolder:WaitForChild("CombatConfig"))
 local gameRules = require(sharedFolder:WaitForChild("GameRules"))
 local profileStore = require(sharedFolder:WaitForChild("ProfileStore"))
 local receiptRouter = require(script.Parent:WaitForChild("ReceiptRouter"))
+local EnemyRuntime = require(script.Parent:WaitForChild("EnemyRuntime"))
 local WaveDirector = require(script.Parent:WaitForChild("WaveDirector"))
 
 local zombieConfig = combatConfig.Zombies
@@ -205,7 +206,7 @@ end
 
 local startSpawn = ensureStartSpawn()
 
-local zombieStates = {}
+local enemyRuntime
 local playerStates = {}
 local wipeState = {
 	active = false,
@@ -214,6 +215,22 @@ local wipeState = {
 }
 local clearReviveOptions
 local cleanupZombieAnimationTracks
+
+local function cleanupEnemyState(state)
+	if cleanupZombieAnimationTracks then
+		cleanupZombieAnimationTracks(state)
+	elseif state and state.animationTracks then
+		for _, track in pairs(state.animationTracks) do
+			if track then
+				pcall(function()
+					track:Stop(0.05)
+					track:Destroy()
+				end)
+			end
+		end
+		state.animationTracks = nil
+	end
+end
 
 local matchState = {
 	runId = 0,
@@ -572,30 +589,7 @@ local function clearAllDownedMarkers()
 end
 
 local function clearAllZombies()
-	for model, state in pairs(zombieStates) do
-		if cleanupZombieAnimationTracks then
-			cleanupZombieAnimationTracks(state)
-		elseif state and state.animationTracks then
-			for _, track in pairs(state.animationTracks) do
-				if track then
-					pcall(function()
-						track:Stop(0.05)
-						track:Destroy()
-					end)
-				end
-			end
-			state.animationTracks = nil
-		end
-
-		if model and model.Parent then
-			model:Destroy()
-		end
-	end
-	table.clear(zombieStates)
-
-	for _, child in ipairs(zombiesFolder:GetChildren()) do
-		child:Destroy()
-	end
+	enemyRuntime:ClearAll()
 end
 
 local function safeLoadCharacter(player)
@@ -683,6 +677,17 @@ local function getLiveTargetFromPlayer(player)
 	return humanoid, root
 end
 
+enemyRuntime = EnemyRuntime.new({
+	folder = zombiesFolder,
+	spawnPointsFolder = spawnPointsFolder,
+	minSpawnDistance = zombieConfig.MinSpawnDistanceToPlayer,
+	getPlayers = function()
+		return Players:GetPlayers()
+	end,
+	getLiveTarget = getLiveTargetFromPlayer,
+	cleanupState = cleanupEnemyState,
+})
+
 local function countAlivePlayers()
 	local count = 0
 	for _, player in ipairs(Players:GetPlayers()) do
@@ -695,25 +700,7 @@ local function countAlivePlayers()
 end
 
 local function getNearestPlayer(position)
-	local nearestPlayer = nil
-	local nearestHumanoid = nil
-	local nearestRoot = nil
-	local nearestDistance = math.huge
-
-	for _, player in ipairs(Players:GetPlayers()) do
-		local humanoid, root = getLiveTargetFromPlayer(player)
-		if humanoid and root then
-			local distance = (root.Position - position).Magnitude
-			if distance < nearestDistance then
-				nearestDistance = distance
-				nearestPlayer = player
-				nearestHumanoid = humanoid
-				nearestRoot = root
-			end
-		end
-	end
-
-	return nearestPlayer, nearestHumanoid, nearestRoot, nearestDistance
+	return enemyRuntime:GetNearestTarget(position)
 end
 
 local function getSurvivalSeconds()
@@ -1475,7 +1462,7 @@ local function createZombie(position, variantKey, stage)
 		lastMoveAnimated = false,
 	}
 
-	zombieStates[zombie] = state
+	enemyRuntime:Register(zombie, state)
 
 	local function handleZombieDeath()
 		if state.dead then
@@ -1484,10 +1471,6 @@ local function createZombie(position, variantKey, stage)
 
 		state.dead = true
 		humanoid.Health = 0
-		if cleanupZombieAnimationTracks then
-			cleanupZombieAnimationTracks(state)
-		end
-
 		if not matchState.ended then
 			awardZombieKillToParty(state.rewardMoney, state.rewardXP)
 			if state.isBoss then
@@ -1500,7 +1483,7 @@ local function createZombie(position, variantKey, stage)
 			end
 		end
 
-		zombieStates[zombie] = nil
+		enemyRuntime:Remove(zombie)
 		task.delay(2, function()
 			if zombie.Parent then
 				zombie:Destroy()
@@ -1517,10 +1500,7 @@ local function createZombie(position, variantKey, stage)
 
 	zombie.AncestryChanged:Connect(function(_, parent)
 		if not parent then
-			if cleanupZombieAnimationTracks then
-				cleanupZombieAnimationTracks(state)
-			end
-			zombieStates[zombie] = nil
+			enemyRuntime:Remove(zombie)
 		end
 	end)
 end
@@ -1568,62 +1548,11 @@ local function ensureDefaultSpawnPoints()
 end
 
 local function getRandomSpawnPoint()
-	local points = {}
-	for _, child in ipairs(spawnPointsFolder:GetChildren()) do
-		if child:IsA("BasePart") then
-			table.insert(points, child)
-		end
-	end
-
-	if #points == 0 then
-		return nil
-	end
-
-	for _ = 1, 12 do
-		local candidate = points[math.random(1, #points)]
-		local _, _, _, distance = getNearestPlayer(candidate.Position)
-		if distance == math.huge or distance >= zombieConfig.MinSpawnDistanceToPlayer then
-			return candidate
-		end
-	end
-
-	return points[math.random(1, #points)]
-end
-
-local function isZombieStateAlive(zombie, state)
-	if not state or state.dead then
-		return false
-	end
-
-	local humanoid = state.humanoid
-	local root = state.root
-	return zombie.Parent == zombiesFolder
-		and humanoid ~= nil
-		and humanoid.Parent ~= nil
-		and humanoid:IsDescendantOf(zombie)
-		and humanoid.Health > 0
-		and root ~= nil
-		and root.Parent ~= nil
-		and root:IsDescendantOf(zombie)
-end
-
-local function discardZombieState(zombie, state)
-	if cleanupZombieAnimationTracks then
-		cleanupZombieAnimationTracks(state)
-	end
-	zombieStates[zombie] = nil
+	return enemyRuntime:GetRandomSpawnPoint()
 end
 
 local function countAliveZombies()
-	local count = 0
-	for zombie, state in pairs(zombieStates) do
-		if isZombieStateAlive(zombie, state) then
-			count += 1
-		else
-			discardZombieState(zombie, state)
-		end
-	end
-	return count
+	return enemyRuntime:CountAlive()
 end
 
 local waveDebugState = {}
@@ -2574,70 +2503,66 @@ RunService.Heartbeat:Connect(function(deltaTime)
 		Workspace:SetAttribute("SurvivalStage", stage)
 	end
 
-	for zombie, state in pairs(zombieStates) do
+	enemyRuntime:ForEachAlive(function(zombie, state)
 		local humanoid = state.humanoid
 		local root = state.root
 
-		if not isZombieStateAlive(zombie, state) then
-			discardZombieState(zombie, state)
-		else
-			local _, targetHumanoid, targetRoot, distance = getNearestPlayer(root.Position)
-			if targetHumanoid and targetRoot and distance < math.huge then
-				local targetPosition = targetRoot.Position
-				if state.isFlyer then
-					targetPosition = targetPosition + Vector3.new(0, state.flyHeight, 0)
-				end
-
-				local toTarget = targetPosition - root.Position
-				local movementVector = state.isFlyer and toTarget or Vector3.new(toTarget.X, 0, toTarget.Z)
-				local movementDistance = movementVector.Magnitude
-				local forward = movementDistance > 0.01 and movementVector.Unit or root.CFrame.LookVector
-				local lookForward = orientationFromForward(forward)
-
-				if state.isBomber and distance <= state.explosionTriggerRange then
-					explodeZombie(state)
-					continue
-				end
-
-				if state.isSpitter and distance <= state.spitRange and now - state.lastSpit >= state.spitCooldown then
-					state.lastSpit = now
-					triggerZombieAttackAnimation(state, now)
-					spawnSpitProjectile(state, targetRoot.Position + Vector3.new(0, 1.4, 0))
-				end
-
-				local isMoving = movementDistance > state.attackRange
-				local basePosition = root.Position
-
-				if isMoving then
-					local maxStep = state.moveSpeed * deltaTime
-					local approachDistance = math.max(0, movementDistance - state.attackRange * 0.55)
-					local step = math.min(maxStep, approachDistance)
-					if step > 0 then
-						basePosition = basePosition + forward * step
-					else
-						isMoving = false
-					end
-				end
-
-				if not isMoving then
-					if now - state.lastAttack >= state.attackCooldown then
-						state.lastAttack = now
-						triggerZombieAttackAnimation(state, now)
-						targetHumanoid:TakeDamage(state.attackDamage)
-					end
-				end
-
-				state.lastMoveAnimated = isMoving
-				updateZombieLocomotionAnimation(state, isMoving)
-				local posedCFrame = buildZombiePoseCFrame(state, basePosition, lookForward, isMoving, now, deltaTime)
-				zombie:PivotTo(posedCFrame)
-			else
-				state.lastMoveAnimated = false
-				updateZombieLocomotionAnimation(state, false)
-				local idleForward = orientationFromForward(root.CFrame.LookVector)
-				local idleCFrame = buildZombiePoseCFrame(state, root.Position, idleForward, false, now, deltaTime)
-				zombie:PivotTo(idleCFrame)
+		local _, targetHumanoid, targetRoot, distance = getNearestPlayer(root.Position)
+		if targetHumanoid and targetRoot and distance < math.huge then
+			local targetPosition = targetRoot.Position
+			if state.isFlyer then
+				targetPosition = targetPosition + Vector3.new(0, state.flyHeight, 0)
 			end
+
+			local toTarget = targetPosition - root.Position
+			local movementVector = state.isFlyer and toTarget or Vector3.new(toTarget.X, 0, toTarget.Z)
+			local movementDistance = movementVector.Magnitude
+			local forward = movementDistance > 0.01 and movementVector.Unit or root.CFrame.LookVector
+			local lookForward = orientationFromForward(forward)
+
+			if state.isBomber and distance <= state.explosionTriggerRange then
+				explodeZombie(state)
+				return
+			end
+
+			if state.isSpitter and distance <= state.spitRange and now - state.lastSpit >= state.spitCooldown then
+				state.lastSpit = now
+				triggerZombieAttackAnimation(state, now)
+				spawnSpitProjectile(state, targetRoot.Position + Vector3.new(0, 1.4, 0))
+			end
+
+			local isMoving = movementDistance > state.attackRange
+			local basePosition = root.Position
+
+			if isMoving then
+				local maxStep = state.moveSpeed * deltaTime
+				local approachDistance = math.max(0, movementDistance - state.attackRange * 0.55)
+				local step = math.min(maxStep, approachDistance)
+				if step > 0 then
+					basePosition = basePosition + forward * step
+				else
+					isMoving = false
+				end
+			end
+
+			if not isMoving then
+				if now - state.lastAttack >= state.attackCooldown then
+					state.lastAttack = now
+					triggerZombieAttackAnimation(state, now)
+					targetHumanoid:TakeDamage(state.attackDamage)
+				end
+			end
+
+			state.lastMoveAnimated = isMoving
+			updateZombieLocomotionAnimation(state, isMoving)
+			local posedCFrame = buildZombiePoseCFrame(state, basePosition, lookForward, isMoving, now, deltaTime)
+			zombie:PivotTo(posedCFrame)
+		else
+			state.lastMoveAnimated = false
+			updateZombieLocomotionAnimation(state, false)
+			local idleForward = orientationFromForward(root.CFrame.LookVector)
+			local idleCFrame = buildZombiePoseCFrame(state, root.Position, idleForward, false, now, deltaTime)
+			zombie:PivotTo(idleCFrame)
 		end
-	end
+	end)
 end)
