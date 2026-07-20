@@ -13,7 +13,6 @@ local profileStore = require(sharedFolder:WaitForChild("ProfileStore"))
 local receiptRouter = require(script.Parent:WaitForChild("ReceiptRouter"))
 local EnemyFactory = require(script.Parent:WaitForChild("EnemyFactory"))
 local EnemyRuntime = require(script.Parent:WaitForChild("EnemyRuntime"))
-local ProceduralEnemyAnimator = require(script.Parent:WaitForChild("ProceduralEnemyAnimator"))
 local ReviveRuntime = require(script.Parent:WaitForChild("ReviveRuntime"))
 local WaveDirector = require(script.Parent:WaitForChild("WaveDirector"))
 
@@ -215,7 +214,6 @@ local endMatch
 
 local function cleanupEnemyState(state)
 	if state and state.proceduralAnimation then
-		ProceduralEnemyAnimator.Reset(state.proceduralAnimation)
 		state.proceduralAnimation = nil
 	end
 	if enemyFactory then
@@ -1449,7 +1447,14 @@ local function triggerZombieAttackAnimation(state, now)
 	local currentTime = now or os.clock()
 	state.attackAnimStartedAt = currentTime
 	state.attackAnimEndsAt = currentTime + state.attackAnimDuration
-	ProceduralEnemyAnimator.TriggerAttack(state.proceduralAnimation, currentTime, state.attackAnimDuration)
+	if state.proceduralAnimation and state.model and state.model.Parent then
+		state.model:SetAttribute("ProceduralAnimationAttackStartedAt", Workspace:GetServerTimeNow())
+		state.model:SetAttribute("ProceduralAnimationAttackDuration", state.attackAnimDuration)
+		state.model:SetAttribute(
+			"ProceduralAnimationAttackSerial",
+			(tonumber(state.model:GetAttribute("ProceduralAnimationAttackSerial")) or 0) + 1
+		)
+	end
 
 	local tracks = state.animationTracks
 	if tracks and tracks.attack then
@@ -1459,7 +1464,6 @@ local function triggerZombieAttackAnimation(state, now)
 end
 
 local function buildZombiePoseCFrame(state, basePosition, lookForward, isMoving, now, deltaTime)
-	ProceduralEnemyAnimator.Update(state.proceduralAnimation, isMoving, now, state.moveSpeed)
 	if state.animationTracks or state.proceduralAnimation then
 		return CFrame.lookAt(basePosition, basePosition + lookForward)
 	end

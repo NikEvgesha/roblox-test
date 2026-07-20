@@ -1,13 +1,15 @@
 local KeyframeSequenceProvider = game:GetService("KeyframeSequenceProvider")
+local CollectionService = game:GetService("CollectionService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
 
 local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local gameRules = require(sharedFolder:WaitForChild("GameRules"))
-local ProceduralEnemyAnimator = require(script.Parent:WaitForChild("ProceduralEnemyAnimator"))
 
 local EnemyFactory = {}
 EnemyFactory.__index = EnemyFactory
+
+local PROCEDURAL_ENEMY_TAG = "ProceduralEnemy"
 
 local function colorFromRgbArray(rgbArray, fallback)
 	if type(rgbArray) ~= "table" then
@@ -654,10 +656,24 @@ function EnemyFactory:Create(position, requestedVariantKey, stage)
 		weldRight.Parent = rightWing
 	end
 
+	local attackAnimationDuration = math.max(0.05, tonumber(variant.AttackAnimationDuration) or 0.24)
+	local proceduralAnimationStyle = type(variant.ProceduralAnimationStyle) == "string"
+		and variant.ProceduralAnimationStyle
+		or nil
+	if proceduralAnimationStyle then
+		model:SetAttribute("ProceduralAnimationStyle", proceduralAnimationStyle)
+		model:SetAttribute("ProceduralAnimationMoveSpeed", moveSpeed)
+		model:SetAttribute("ProceduralAnimationAttackSerial", 0)
+		model:SetAttribute("ProceduralAnimationAttackStartedAt", 0)
+		model:SetAttribute("ProceduralAnimationAttackDuration", attackAnimationDuration)
+	end
+
 	model.Parent = self.enemyFolder
+	if proceduralAnimationStyle then
+		CollectionService:AddTag(model, PROCEDURAL_ENEMY_TAG)
+	end
 	model:SetAttribute("IsBossZombie", variant.IsBoss == true)
-	local proceduralAnimation = ProceduralEnemyAnimator.Capture(model, variant.ProceduralAnimationStyle)
-	local animationTracks = proceduralAnimation and nil or self:_buildAnimationTracks(model, humanoid)
+	local animationTracks = proceduralAnimationStyle and nil or self:_buildAnimationTracks(model, humanoid)
 	self:_attachHealthBar(model, humanoid, head, variant.DisplayName or variantKey)
 
 	local state = {
@@ -665,7 +681,7 @@ function EnemyFactory:Create(position, requestedVariantKey, stage)
 		humanoid = humanoid,
 		root = root,
 		animationTracks = animationTracks,
-		proceduralAnimation = proceduralAnimation,
+		proceduralAnimation = proceduralAnimationStyle ~= nil,
 		variantKey = variantKey,
 		variant = variant,
 		moveSpeed = moveSpeed,
@@ -696,7 +712,7 @@ function EnemyFactory:Create(position, requestedVariantKey, stage)
 		flyHeight = variant.FlyHeight or 0,
 		isBoss = variant.IsBoss == true,
 		visualPhase = math.random() * math.pi * 2,
-		attackAnimDuration = math.max(0.05, tonumber(variant.AttackAnimationDuration) or 0.24),
+		attackAnimDuration = attackAnimationDuration,
 		attackAnimStartedAt = 0,
 		attackAnimEndsAt = 0,
 		lastMoveAnimated = false,

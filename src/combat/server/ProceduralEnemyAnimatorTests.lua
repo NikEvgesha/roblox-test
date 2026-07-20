@@ -1,4 +1,8 @@
-local ProceduralEnemyAnimator = require(script.Parent:WaitForChild("ProceduralEnemyAnimator"))
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local ProceduralEnemyAnimator = require(
+	ReplicatedStorage:WaitForChild("Shared"):WaitForChild("ProceduralEnemyAnimator")
+)
 
 local ProceduralEnemyAnimatorTests = {}
 

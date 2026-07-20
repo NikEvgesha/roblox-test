@@ -23,7 +23,7 @@ Validate that the wave survival loop remains stable after each task and does not
 | SMK-13 | Ghost enemy cleanup | Detach a living enemy Humanoid after all spawns finish | Invalid state is pruned and the wave resolves |
 | SMK-14 | Authorized mob load controls | Click `Spawn 1`, `Spawn 10`, and `Spawn 100` in Combat Studio or as an authorized published user | Requested moving enemies spawn; tester remains alive; unauthorized users have no panel |
 | SMK-15 | Gunner unlimited ammunition | Fire ranged weapons continuously and press `R` | Shots do not stop, no ammo HUD appears, and reload does not run |
-| SMK-16 | Enemy animation comparison | Use the `Shardling`, `Moss Brute`, `Ember Wisp`, and `Animated Troll (tracks)` debug buttons | Each template spawns and moves; procedural limbs visibly cycle without whole-root ground bob, and Troll plays its walk/attack AnimationTracks |
+| SMK-16 | Enemy animation comparison | Use the `Shardling`, `Moss Brute`, `Ember Wisp`, and `Animated Troll (tracks)` debug buttons | Each template spawns and moves; procedural limbs visibly cycle on the client without whole-root ground bob, attacks animate near the player, and Troll plays its walk/attack AnimationTracks |
 
 ## Automated Studio Tests
 
