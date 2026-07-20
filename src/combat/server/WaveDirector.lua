@@ -10,6 +10,24 @@ local function normalizeWave(waveNumber)
 	return math.max(1, math.floor(tonumber(waveNumber) or 1))
 end
 
+local function evaluateCountCurve(curve, waveNumber)
+	if type(curve) ~= "table" then
+		return nil
+	end
+	local startWave = normalizeWave(curve.StartWave)
+	local endWave = math.max(startWave, normalizeWave(curve.EndWave))
+	local startCount = tonumber(curve.StartCount)
+	local endCount = tonumber(curve.EndCount)
+	if startCount == nil or endCount == nil then
+		return nil
+	end
+	if endWave == startWave then
+		return endCount
+	end
+	local alpha = math.clamp((normalizeWave(waveNumber) - startWave) / (endWave - startWave), 0, 1)
+	return startCount + (endCount - startCount) * alpha
+end
+
 function WaveDirector.new(config)
 	local self = setmetatable({}, WaveDirector)
 	self.config = type(config) == "table" and config or {}
@@ -95,19 +113,33 @@ function WaveDirector:GetVariantWeights(waveNumber)
 end
 
 function WaveDirector:GetBossVariantKey(waveNumber)
+	local keys = self:GetBossVariantKeys(waveNumber)
+	return keys[1]
+end
+
+function WaveDirector:GetBossVariantKeys(waveNumber)
 	local wave = normalizeWave(waveNumber)
 	if not self:IsBossWave(wave) then
-		return nil
+		return {}
 	end
 
 	local order = self.config.BossVariantOrder
 	if type(order) ~= "table" or #order == 0 then
-		return self.config.BossVariantKey
+		return self.config.BossVariantKey and { self.config.BossVariantKey } or {}
+	end
+
+	local allBossesWave = tonumber(self.config.AllBossesWave)
+	if allBossesWave and wave == normalizeWave(allBossesWave) then
+		local allBosses = {}
+		for _, variantKey in ipairs(order) do
+			table.insert(allBosses, variantKey)
+		end
+		return allBosses
 	end
 
 	local interval = math.max(1, math.floor(tonumber(self.config.BossWaveInterval) or 10))
 	local bossWaveIndex = math.floor(wave / interval)
-	return order[((bossWaveIndex - 1) % #order) + 1]
+	return { order[((bossWaveIndex - 1) % #order) + 1] }
 end
 
 function WaveDirector:ComputeSpawnBudget(waveNumber, partySize, difficulty)
@@ -115,32 +147,35 @@ function WaveDirector:ComputeSpawnBudget(waveNumber, partySize, difficulty)
 	local waveEntry = self:GetWaveEntry(wave)
 	local multipliers = self:GetDifficultyMultipliers(difficulty)
 
-	local baseEnemies = tonumber(waveEntry and waveEntry.BaseEnemiesPerWave)
-	if baseEnemies == nil then
-		baseEnemies = tonumber(self.config.BaseEnemiesPerWave) or 8
-	end
-
-	local perWaveStep = tonumber(waveEntry and waveEntry.EnemiesPerWaveStep)
-	if perWaveStep == nil then
-		perWaveStep = tonumber(self.config.EnemiesPerWaveStep) or 1
-	end
-
-	local growthStartWave = normalizeWave(waveEntry and waveEntry.MinWave or 1)
-	local normalCount = baseEnemies + math.max(0, wave - growthStartWave) * perWaveStep
-
-	if self:IsBossWave(wave) then
-		local additional = tonumber(waveEntry and waveEntry.BossAdditionalEnemies)
-		if additional == nil then
-			additional = tonumber(self.config.BossAdditionalEnemies) or 0
+	local normalCount = evaluateCountCurve(self.config.WaveEnemyCountCurve, wave)
+	if normalCount == nil then
+		local baseEnemies = tonumber(waveEntry and waveEntry.BaseEnemiesPerWave)
+		if baseEnemies == nil then
+			baseEnemies = tonumber(self.config.BaseEnemiesPerWave) or 8
 		end
-		normalCount += additional
+
+		local perWaveStep = tonumber(waveEntry and waveEntry.EnemiesPerWaveStep)
+		if perWaveStep == nil then
+			perWaveStep = tonumber(self.config.EnemiesPerWaveStep) or 1
+		end
+
+		local growthStartWave = normalizeWave(waveEntry and waveEntry.MinWave or 1)
+		normalCount = baseEnemies + math.max(0, wave - growthStartWave) * perWaveStep
+
+		if self:IsBossWave(wave) then
+			local additional = tonumber(waveEntry and waveEntry.BossAdditionalEnemies)
+			if additional == nil then
+				additional = tonumber(self.config.BossAdditionalEnemies) or 0
+			end
+			normalCount += additional
+		end
 	end
 
 	normalCount *= self:GetPartyMultiplier(partySize)
 	normalCount *= multipliers.enemyCount
 	normalCount = math.max(1, math.floor(normalCount + 0.5))
 
-	local bossCount = self:IsBossWave(wave) and 1 or 0
+	local bossCount = #self:GetBossVariantKeys(wave)
 	return normalCount + bossCount, bossCount
 end
 
@@ -148,7 +183,10 @@ function WaveDirector:GetAliveCap(waveNumber, partySize, difficulty)
 	local wave = normalizeWave(waveNumber)
 	local waveEntry = self:GetWaveEntry(wave)
 	local multipliers = self:GetDifficultyMultipliers(difficulty)
-	local baseAlive = tonumber(waveEntry and waveEntry.MaxAlive)
+	local baseAlive = evaluateCountCurve(self.config.AliveCapCurve, wave)
+	if baseAlive == nil then
+		baseAlive = tonumber(waveEntry and waveEntry.MaxAlive)
+	end
 
 	if baseAlive == nil then
 		local configBaseAlive = tonumber(self.config.BaseMaxAlive) or 10
@@ -159,6 +197,10 @@ function WaveDirector:GetAliveCap(waveNumber, partySize, difficulty)
 	local maxAlive = math.max(2, baseAlive)
 	maxAlive *= self:GetPartyMultiplier(partySize)
 	maxAlive *= multipliers.enemyCount
+	local absoluteMaximum = tonumber(self.config.AbsoluteMaxAlive)
+	if absoluteMaximum and absoluteMaximum > 0 then
+		maxAlive = math.min(maxAlive, absoluteMaximum)
+	end
 	return math.max(2, math.floor(maxAlive + 0.5))
 end
 

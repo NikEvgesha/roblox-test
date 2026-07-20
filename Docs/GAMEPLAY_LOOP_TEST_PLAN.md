@@ -26,13 +26,15 @@ Validate that the wave survival loop remains stable after each task and does not
 | SMK-16 | Enemy animation comparison | Use the `Shardling`, `Moss Brute`, `Ember Wisp`, and `Animated Troll (tracks)` debug buttons | Each template spawns and moves; procedural limbs visibly cycle on the client without whole-root ground bob, attacks animate near the player, and Troll plays its walk/attack AnimationTracks |
 | SMK-17 | Expanded enemy roster | Click `Next roster mob` twenty times | All 20 configured variants spawn their dedicated templates, animate, and never fall back to cube enemies |
 | SMK-18 | Boss ability telegraphs | Spawn each of the four bosses and remain in range through one cooldown | Rock circles/stun, expanding shockwave, flame lanes, and brood portals appear before their effects; cleanup restores player movement and removes telegraphs |
+| SMK-19 | 50-wave density curve | Inspect Wave 1 and reach/force Wave 50 | Medium solo starts at 100 normal mobs, ends at 500 normal mobs, and never exceeds 500 simultaneously active enemies |
+| SMK-20 | Final boss wave | Reach/force Wave 50 | Stone Titan, Storm Colossus, Flame Warden, and Brood Queen each spawn once in the same wave |
 
 ## Automated Studio Tests
 
 - Combat Studio runs fifteen automated suites: seven server services plus spectator, weapon, weapon animation, input, aim, HUD view, HUD state, and feedback.
 - Passing state: all corresponding `Workspace.*TestsPassed` attributes are `true`.
 - `GameRulesTests`: `26` assertions for party rewards, XP progression, difficulty/stat scaling, respawn timing, meta costs, and ability upgrades.
-- `WaveDirectorTests`: `30` assertions for wave lookup, boss cadence/rotation, spawn budgets, party/difficulty scaling, alive caps, spawn intervals, and cumulative variant introductions.
+- `WaveDirectorTests`: `41` assertions for wave lookup, final four-boss cadence, 100 -> 500 spawn budgets, party/difficulty scaling, alive caps, spawn intervals, and cumulative variant introductions.
 - `BossAbilityRuntimeTests`: `9` assertions for circular and oriented-box telegraph hit geometry.
 - `EnemyRuntimeTests`: `18` assertions for registration, alive-state pruning, cleanup, nearest-target lookup, spawn-point safety, iteration, and full clear.
 - `EnemyFactoryTests`: `42` assertions for fallback/template construction, grounded placement, scaling, state fields, health UI, callbacks, boss data, and animation cleanup.
@@ -46,7 +48,7 @@ Validate that the wave survival loop remains stable after each task and does not
 - `CombatFeedbackControllerTests`: `18` assertions for hit routing, marker colors/lifetime, damage-number projection/text/lifetime, invalid payloads, and cleanup.
 - `WeaponAnimationControllerTests`: `17` assertions for track caching, ranged speed, melee cooldown scaling, scheduled stops, and invalid definitions.
 - `ProceduralEnemyAnimatorTests`: `25` assertions for style capture, 30 Hz throttling, locomotion transforms, attack lunges, orbit offsets, and reset behavior.
-- Play Mode baseline: Medium solo Wave 1 reports budget `8`, alive cap `14`, spawn interval `0.29`, and creates `8` enemies.
+- Play Mode baseline (`2026-07-20`): Medium solo Wave 1 reports budget `100`, alive cap `100`, spawn interval `0.29`, and all eight spawn markers are radius `150`; `83` simultaneous enemies were observed during the smoke run before stopping.
 - Factory baseline: every Wave 1 enemy has a root, Humanoid, and health bar; killing all enemies advances to `Intermission`.
 - Revive baseline: solo death creates one downed marker and changes `WaveState` to `WipeWindow`; a fresh Combat boot reports all fifteen suites passing.
 - Spectator integration baseline: a `respawn` event switches to `Scriptable` camera and shows status; `respawn_clear` restores `Custom` camera with the local `Humanoid` as subject.
@@ -56,6 +58,7 @@ Validate that the wave survival loop remains stable after each task and does not
 - Wave 10 integration baseline (`2026-07-20`): accelerated Studio run visited Waves `1-10`; a rootless enemy injected on Wave 5 did not stall progression; Wave 10 spawned and killed the boss; the run ended with `Victory`, `RunResult`, and `AliveZombies == 0`; rewards recorded `+5` Crystals, `+1` BossKills, and `130` credited kills.
 - Published victory baseline (`2026-07-20`): owner confirmed that Wave 10 completes and the delayed return to Lobby works after publishing.
 - Load baseline (`2026-07-20`): owner reports stable play at `500` active mobs; higher counts are possible but are outside the current target.
+- Automated baseline (`2026-07-20`): all fifteen suites pass with `400` assertions; Wave 50 pure-logic budget is `500` normal enemies plus all `4` bosses and an alive cap of `500`.
 
 ## Regression Matrix
 

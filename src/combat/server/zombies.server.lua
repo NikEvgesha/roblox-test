@@ -245,6 +245,7 @@ local matchState = {
 	waveActive = false,
 	waveSpawnsRemaining = 0,
 	waveBossSpawnsRemaining = 0,
+	waveBossSpawnIndex = 0,
 	intermissionEndsAt = 0,
 	nextSpawnAt = 0,
 	intermissionSecondLastSent = -1,
@@ -900,12 +901,15 @@ local function ensureDefaultSpawnPoints()
 		return
 	end
 
-	ensureSpawnPoint("SpawnPoint_1", Vector3.new(60, 2.5, 0))
-	ensureSpawnPoint("SpawnPoint_2", Vector3.new(-60, 2.5, 0))
-	ensureSpawnPoint("SpawnPoint_3", Vector3.new(0, 2.5, 60))
-	ensureSpawnPoint("SpawnPoint_4", Vector3.new(0, 2.5, -60))
-	ensureSpawnPoint("SpawnPoint_5", Vector3.new(45, 2.5, 45))
-	ensureSpawnPoint("SpawnPoint_6", Vector3.new(-45, 2.5, -45))
+	local radius = math.max(1, tonumber(zombieConfig.DefaultSpawnRadius) or 150)
+	local pointCount = math.max(4, math.floor(tonumber(zombieConfig.DefaultSpawnPointCount) or 8))
+	for index = 1, pointCount do
+		local angle = (index - 1) * math.pi * 2 / pointCount
+		ensureSpawnPoint(
+			("SpawnPoint_%d"):format(index),
+			Vector3.new(math.cos(angle) * radius, 2.5, math.sin(angle) * radius)
+		)
+	end
 end
 
 local function getRandomSpawnPoint()
@@ -1005,6 +1009,7 @@ local function startWave(waveNumber)
 	matchState.waveActive = true
 	matchState.waveSpawnsRemaining = totalSpawns
 	matchState.waveBossSpawnsRemaining = bossSpawns
+	matchState.waveBossSpawnIndex = 0
 	matchState.intermissionEndsAt = 0
 	matchState.intermissionSecondLastSent = -1
 	matchState.nextSpawnAt = os.clock()
@@ -1096,6 +1101,7 @@ local function startNewMatch()
 	matchState.waveActive = false
 	matchState.waveSpawnsRemaining = 0
 	matchState.waveBossSpawnsRemaining = 0
+	matchState.waveBossSpawnIndex = 0
 	matchState.intermissionEndsAt = 0
 	matchState.nextSpawnAt = 0
 	matchState.intermissionSecondLastSent = -1
@@ -1286,7 +1292,10 @@ local function spawnZombieFromPoint()
 
 	local variantKey
 	if matchState.waveBossSpawnsRemaining > 0 then
-		local configuredBoss = waveDirector:GetBossVariantKey(matchState.waveNumber)
+		matchState.waveBossSpawnIndex += 1
+		local bossVariantKeys = waveDirector:GetBossVariantKeys(matchState.waveNumber)
+		local configuredBoss = bossVariantKeys[matchState.waveBossSpawnIndex]
+			or bossVariantKeys[#bossVariantKeys]
 			or zombieConfig.BossVariantKey
 			or "BossBrute"
 		if variantConfig[configuredBoss] then

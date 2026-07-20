@@ -117,7 +117,10 @@ src/shared
 - The current practical load baseline is `500` active mobs without unacceptable slowdown; higher counts are optional stress territory.
 - Four visual-direction examples live under `Workspace.Enemy.CodexProceduralExamples`: `Codex Shardling` (scuttle), `Codex Moss Brute` (stomp), and `Codex Ember Wisp` (hover/orbit) use procedural Motor6D animation; `Codex Animated Troll` uses standard Roblox AnimationTracks for walk and attack. Procedural `Motor6D.Transform` updates run locally through `procedural_enemy_animator.client.lua` because Transform does not replicate from the server; the server replicates only tags, style/speed attributes, and an attack serial. The authorized debug panel has one-spawn preview buttons for all four so the approaches can be compared under the same AI/runtime conditions.
 - `Workspace.Enemy.CodexMobCollection` contains 20 additional animated mob templates and four boss templates. `DebugMobPreviewOrder` drives a single cycle button for roster review; dedicated buttons spawn each boss.
-- Two additional variants enter the cumulative spawn pool on each Wave 1-10. Boss waves rotate `Stone Titan -> Storm Colossus -> Flame Warden -> Brood Queen` and wrap after Wave 40.
+- The current run target is `50` waves. Medium solo normal-enemy budgets and simultaneous alive caps scale linearly from `100` on Wave 1 to `500` on Wave 50; the alive cap is hard-clamped to the tested `500`-mob ceiling.
+- The 20 configured variants enter the cumulative pool across the full run: Waves `1-5`, `7/9/11/13/15`, `18/21/24/27/30`, and `34/38/42/46/50`.
+- Boss waves use `Stone Titan` on Wave 10, `Storm Colossus` on 20, `Flame Warden` on 30, `Brood Queen` on 40, and all four bosses together on Wave 50.
+- Combat has eight editable `Workspace.ZombieSpawnPoints` markers arranged on a radius-`150` ring; runtime fallback generation uses the same configuration.
 - `BossAbilityRuntime` owns server-visible telegraphs and delayed effects: stun rockfall circles, expanding knockback shockwave, three flame lanes, and brood summon portals. Stun temporarily zeros movement/jump and restores prior values after expiration; death cleanup removes outstanding boss telegraphs.
 - Wave spawn cadence uses `Zombies.WaveSpawnSpeedMultiplier = 10` for the current high-density prototype test.
 - Mob load controls spawn `1`, `10`, or `100` moving Walker enemies and grant invisible damage protection. They are available in Studio and in published servers only to UserIds explicitly listed in `Debug.EnemySpawnerAuthorizedUserIds`.
@@ -125,7 +128,7 @@ src/shared
 - Shared `GameRules` owns pure reward split, XP, scaling, respawn, meta cost, and ability-upgrade calculations used by runtime code.
 - Combat Studio automatically runs `GameRulesTests`; the current suite covers 26 assertions and reports through `Workspace.GameRulesTestsPassed`.
 - Server `WaveDirector` owns wave-table selection, boss detection, spawn budgets, alive caps, spawn cadence, and enemy variant weights.
-- Combat Studio automatically runs `WaveDirectorTests`; the current suite covers 19 assertions and reports through `Workspace.WaveDirectorTestsPassed`.
+- Combat Studio automatically runs `WaveDirectorTests`; the current suite covers 41 assertions and reports through `Workspace.WaveDirectorTestsPassed`.
 - Server `EnemyRuntime` owns the enemy registry, alive-state validation, ghost-state pruning, nearest-target lookup, spawn-point selection, and active-enemy iteration.
 - Combat Studio automatically runs `EnemyRuntimeTests`; the current suite covers 18 assertions and reports through `Workspace.EnemyRuntimeTestsPassed`.
 - Server `EnemyFactory` owns template/fallback model construction, scaling, health bars, animation loading/cleanup, state assembly, and death lifecycle callbacks.
@@ -144,18 +147,16 @@ src/shared
 - Client `CombatFeedbackController` owns hit markers, optional hit-confirm audio, projected damage numbers, and their lifetimes.
 - Client `WeaponAnimationController` owns animation-track caching plus ranged/melee playback timing.
 - Combat Studio runs `CombatHudViewTests` (19), `CombatHudControllerTests` (34), `CombatFeedbackControllerTests` (18), and `WeaponAnimationControllerTests` (17 assertions).
-- Combat Studio runs `ProceduralEnemyAnimatorTests` with 25 assertions and `BossAbilityRuntimeTests` with 9 assertions; the full automated baseline is 389 assertions across fifteen suites.
+- Combat Studio runs `ProceduralEnemyAnimatorTests` with 25 assertions and `BossAbilityRuntimeTests` with 9 assertions; the full automated baseline is 400 assertions across fifteen suites.
 - `ReceiptRouter` is the sole owner of `MarketplaceService.ProcessReceipt`; revive products register handlers instead of replacing the callback.
 
-Важно: часть docs и task board устарели. Актуальный дизайн теперь в `GDD_V2.md`.
+Важно: актуальный дизайн находится в `GDD_V2.md`; пункты, явно помеченные как исторический baseline, описывают уже пройденный этап.
 
 ## Ближайший Правильный План
 
-1. Проверить опубликованный teleport `Lobby -> Combat` через Roblox-клиент.
-2. Пройти полный кубовый забег на `10` волн и проверить возврат в Lobby.
-3. Добавить автоматические проверки чистой игровой логики.
-4. Разделить крупные runtime-скрипты на тестируемые сервисы.
-5. Довести минимальный вертикальный срез:
+1. Опубликовать и пройти полный забег на `50` волн, включая одновременный выход четырех боссов на финале.
+2. Сбалансировать кривую `100 -> 500` мобов, награды, HP/урон и длительность волн по результатам playtest.
+3. Продолжить минимальный вертикальный срез:
    - lobby group;
    - profession select;
    - teleport;
@@ -166,7 +167,9 @@ src/shared
 	- boss every 10 waves;
 	- return to lobby.
 
-## Зафиксированные Решения Для Кубового Прототипа
+## Исторический Baseline Первого Кубового Прототипа
+
+Этот раздел фиксирует уже пройденный 10-wave тест и не переопределяет текущий 50-wave баланс выше.
 
 1. Первый тестовый забег: `10` волн.
 2. `Wave 10` является boss wave.

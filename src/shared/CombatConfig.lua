@@ -94,7 +94,7 @@ local config = {
 	Zombies = {
 		LobbyPlaceId = 81561302455824,
 		DefaultDifficulty = "Medium",
-		TargetWaveCount = 10,
+		TargetWaveCount = 50,
 		IntermissionSeconds = 12,
 		BaseEnemiesPerWave = 8,
 		EnemiesPerWaveStep = 1,
@@ -977,17 +977,44 @@ for variantKey, variant in pairs(bossVariants) do
 end
 
 config.Zombies.VariantIntroductions = {
-	{ MinWave = 1, Weights = { Needleling = 10, DustMite = 7 } },
-	{ MinWave = 2, Weights = { ThornRunner = 9, Shellback = 6 } },
-	{ MinWave = 3, Weights = { FrostTick = 8, LavaCrawler = 4 } },
-	{ MinWave = 4, Weights = { BoneSkitter = 8, Stonekin = 7 } },
-	{ MinWave = 5, Weights = { BogHulker = 6, IronMauler = 5 } },
-	{ MinWave = 6, Weights = { CrystalGuard = 4, AshBrute = 6 } },
-	{ MinWave = 7, Weights = { PlagueBearer = 5, SandGolem = 4 } },
-	{ MinWave = 8, Weights = { FrostWisp = 7, VoidEye = 4 } },
-	{ MinWave = 9, Weights = { SparkDrone = 7, ToxicOrb = 4 } },
-	{ MinWave = 10, Weights = { SolarWisp = 4, StormShard = 6 } },
+	{ MinWave = 1, Weights = { Needleling = 10 } },
+	{ MinWave = 2, Weights = { DustMite = 7 } },
+	{ MinWave = 3, Weights = { ThornRunner = 9 } },
+	{ MinWave = 4, Weights = { Shellback = 6 } },
+	{ MinWave = 5, Weights = { FrostTick = 8 } },
+	{ MinWave = 7, Weights = { LavaCrawler = 4 } },
+	{ MinWave = 9, Weights = { BoneSkitter = 8 } },
+	{ MinWave = 11, Weights = { Stonekin = 7 } },
+	{ MinWave = 13, Weights = { BogHulker = 6 } },
+	{ MinWave = 15, Weights = { IronMauler = 5 } },
+	{ MinWave = 18, Weights = { CrystalGuard = 4 } },
+	{ MinWave = 21, Weights = { AshBrute = 6 } },
+	{ MinWave = 24, Weights = { PlagueBearer = 5 } },
+	{ MinWave = 27, Weights = { SandGolem = 4 } },
+	{ MinWave = 30, Weights = { FrostWisp = 7 } },
+	{ MinWave = 34, Weights = { VoidEye = 4 } },
+	{ MinWave = 38, Weights = { SparkDrone = 7 } },
+	{ MinWave = 42, Weights = { ToxicOrb = 4 } },
+	{ MinWave = 46, Weights = { SolarWisp = 4 } },
+	{ MinWave = 50, Weights = { StormShard = 6 } },
 }
+
+config.Zombies.AllBossesWave = 50
+config.Zombies.WaveEnemyCountCurve = {
+	StartWave = 1,
+	EndWave = 50,
+	StartCount = 100,
+	EndCount = 500,
+}
+config.Zombies.AliveCapCurve = {
+	StartWave = 1,
+	EndWave = 50,
+	StartCount = 100,
+	EndCount = 500,
+}
+config.Zombies.AbsoluteMaxAlive = 500
+config.Zombies.DefaultSpawnRadius = 150
+config.Zombies.DefaultSpawnPointCount = 8
 
 config.Zombies.BossVariantOrder = {
 	"BossStoneTitan",
