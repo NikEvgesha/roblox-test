@@ -18,6 +18,8 @@ local playerGui = player:WaitForChild("PlayerGui")
 local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local combatConfig = require(sharedFolder:WaitForChild("CombatConfig"))
 local SpectatorController = require(script.Parent:WaitForChild("SpectatorController"))
+local WeaponController = require(script.Parent:WaitForChild("WeaponController"))
+local CombatInputController = require(script.Parent:WaitForChild("CombatInputController"))
 
 local combatActionEvent = ReplicatedStorage:WaitForChild(COMBAT_ACTION_EVENT_NAME)
 local combatStateEvent = ReplicatedStorage:WaitForChild(COMBAT_STATE_EVENT_NAME)
@@ -540,8 +542,6 @@ skillsListLayout.Parent = skillsList
 local currentToolName = ""
 local ammoMag = 0
 local ammoReserve = 0
-local isReloading = false
-local currentFireRateMultiplier = 1
 local aimModeEnabled = false
 local currentHealth = 100
 local maxHealth = 100
@@ -557,11 +557,11 @@ local DAMAGE_NUMBER_LIFETIME = 0.75
 local getCurrentWeapon
 local mouse = player:GetMouse()
 local spectatorController
+local weaponController
+local inputController
 local hitMarkerTimer = 0
 local recoilPitch = 0
 local recoilYaw = 0
-local leftMouseHeld = false
-local nextAutoFireAt = 0
 local MELEE_AUTO_LOCK_DISTANCE = 8
 local RANGED_AIM_LOCK_DISTANCE = 10
 local LOOK_ROTATE_LERP_SPEED = 20
@@ -1451,7 +1451,7 @@ local function refreshCombatHud()
 
 	if weapon and weapon.Category == "Ranged" then
 		if (combatConfig.Ammo or {}).MagazinesEnabled then
-			local suffix = isReloading and " (reloading)" or ""
+			local suffix = weaponController and weaponController:IsReloading() and " (reloading)" or ""
 			if ammoReserve < 0 then
 				ammoLabel.Text = ("Ammo: %d / INF%s"):format(ammoMag, suffix)
 			else
@@ -1788,35 +1788,41 @@ local function playWeaponReloadAnimation(weaponKey)
 	return
 end
 
-local function fireRangedWeaponOnce(weaponKey, weapon)
-	local camera = Workspace.CurrentCamera
-	if not camera then
-		return false
-	end
+weaponController = WeaponController.new({
+	player = player,
+	workspace = Workspace,
+	combatConfig = combatConfig,
+	combatActionEvent = combatActionEvent,
+	getCurrentWeapon = getCurrentWeapon,
+	resolveRangedAimData = resolveRangedAimData,
+	findNearestEnemyRoot = findNearestZombieRoot,
+	playFireAnimation = playWeaponFireAnimation,
+	playReloadAnimation = playWeaponReloadAnimation,
+	applyShotRecoil = applyShotRecoil,
+	meleeLockDistance = MELEE_AUTO_LOCK_DISTANCE,
+	canAct = function()
+		return not spectatorController:IsEnabled() and not hasBlockingUiOpen()
+	end,
+})
 
-	local character = player.Character
-	local root = character and character:FindFirstChild("HumanoidRootPart")
-	if not root or not root:IsA("BasePart") then
-		return false
-	end
-
-	local targetPosition, rayDirection, rayOrigin = resolveRangedAimData(camera, character, root, weapon)
-	local direction = rayDirection
-	if direction.Magnitude < 0.01 then
-		direction = camera.CFrame.LookVector
-		rayDirection = direction
-	end
-
-	playWeaponFireAnimation(weaponKey)
-	applyShotRecoil(weapon)
-	combatActionEvent:FireServer("fire", {
-		direction = direction,
-		targetPosition = targetPosition,
-		rayOrigin = rayOrigin,
-		rayDirection = rayDirection,
-	})
-	return true
-end
+inputController = CombatInputController.new({
+	mouse = mouse,
+	userInputService = UserInputService,
+	spectatorController = spectatorController,
+	weaponController = weaponController,
+	setAimEnabled = setAimModeEnabled,
+	isReviveUiVisible = function()
+		return reviveButtonsFrame.Visible
+	end,
+	hasBlockingUiOpen = hasBlockingUiOpen,
+	openShop = function()
+		shopEvent:FireServer("open")
+	end,
+	openSkills = function()
+		skillEvent:FireServer("open")
+	end,
+})
+inputController:Start()
 
 local function bindCharacter(character)
 	spectatorController:SetDowned(false)
@@ -1846,137 +1852,6 @@ local function bindCharacter(character)
 	end)
 end
 
-mouse.Button1Down:Connect(function()
-	leftMouseHeld = true
-
-	if hasBlockingUiOpen() then
-		return
-	end
-
-	local weaponKey, weapon = getCurrentWeapon()
-	if not weaponKey or not weapon then
-		return
-	end
-
-	if weapon.Category == "Ranged" then
-		if fireRangedWeaponOnce(weaponKey, weapon) then
-			nextAutoFireAt = os.clock() + math.max(0.03, (weapon.FireCooldown or 0.1) * 0.85)
-		end
-	else
-		local now = os.clock()
-		local progressionFolder = player:FindFirstChild("Progression")
-		local metaProgressionFolder = player:FindFirstChild("MetaProgression")
-		local speedSkillStat = progressionFolder and progressionFolder:FindFirstChild("SpeedLevel") or nil
-		local speedMetaStat = metaProgressionFolder and metaProgressionFolder:FindFirstChild("Speed") or nil
-		local speedSkillLevel = speedSkillStat and speedSkillStat:IsA("IntValue") and math.max(0, speedSkillStat.Value) or 0
-		local speedMetaLevel = speedMetaStat and speedMetaStat:IsA("IntValue") and math.max(0, speedMetaStat.Value) or 0
-		local speedSkillConfig = combatConfig.Progression and combatConfig.Progression.Skills
-			and combatConfig.Progression.Skills.Speed
-			or nil
-		local speedMetaConfig = combatConfig.MetaProgression
-			and combatConfig.MetaProgression.Upgrades
-			and combatConfig.MetaProgression.Upgrades.Speed
-			or nil
-		local attackSpeedMultiplier = math.max(
-			0.25,
-			(tonumber(weapon.AttackSpeedMultiplier) or 1)
-				+ speedSkillLevel * (tonumber(speedSkillConfig and speedSkillConfig.MeleeAttackSpeedPerLevel) or 0)
-				+ speedMetaLevel * (tonumber(speedMetaConfig and speedMetaConfig.MeleeAttackSpeedPerLevel) or 0)
-		)
-		local meleeCooldown = math.max(0.2, (tonumber(weapon.Cooldown) or 0.75) / attackSpeedMultiplier)
-		local nextMeleeAt = tonumber(player:GetAttribute("ClientNextMeleeAt")) or 0
-		if now < nextMeleeAt then
-			return
-		end
-		player:SetAttribute("ClientNextMeleeAt", now + meleeCooldown)
-
-		playWeaponFireAnimation(weaponKey, meleeCooldown)
-		local payload = nil
-		local character = player.Character
-		local root = character and character:FindFirstChild("HumanoidRootPart")
-		if root and root:IsA("BasePart") then
-			local lockRoot = findNearestZombieRoot(root.Position, MELEE_AUTO_LOCK_DISTANCE)
-			if lockRoot then
-				local direction = Vector3.new(
-					lockRoot.Position.X - root.Position.X,
-					0,
-					lockRoot.Position.Z - root.Position.Z
-				)
-				if direction.Magnitude > 0.01 then
-					payload = {
-						direction = direction.Unit,
-					}
-				end
-			end
-		end
-		combatActionEvent:FireServer("melee", payload)
-	end
-end)
-
-mouse.Button1Up:Connect(function()
-	leftMouseHeld = false
-end)
-
-UserInputService.InputBegan:Connect(function(input, gameProcessed)
-	if gameProcessed then
-		return
-	end
-
-	if spectatorController:IsEnabled() then
-		spectatorController:HandleInputBegan(input)
-		return
-	end
-
-	if input.UserInputType == Enum.UserInputType.MouseButton2 then
-		setAimModeEnabled(true)
-		return
-	end
-
-	if reviveButtonsFrame.Visible then
-		return
-	end
-
-	if input.KeyCode == Enum.KeyCode.B then
-		setAimModeEnabled(false)
-		shopEvent:FireServer("open")
-		return
-	end
-
-	if input.KeyCode == Enum.KeyCode.K then
-		setAimModeEnabled(false)
-		skillEvent:FireServer("open")
-		return
-	end
-
-	if hasBlockingUiOpen() then
-		return
-	end
-
-	local weaponKey, weapon = getCurrentWeapon()
-	if not weaponKey or not weapon then
-		return
-	end
-
-	if (combatConfig.Ammo or {}).MagazinesEnabled
-		and input.KeyCode == Enum.KeyCode.R
-		and weapon.Category == "Ranged"
-	then
-		playWeaponReloadAnimation(weaponKey)
-		combatActionEvent:FireServer("reload")
-	end
-end)
-
-UserInputService.InputEnded:Connect(function(input)
-	if spectatorController:IsEnabled() then
-		spectatorController:HandleInputEnded(input)
-		return
-	end
-
-	if input.UserInputType == Enum.UserInputType.MouseButton2 then
-		setAimModeEnabled(false)
-	end
-end)
-
 closeShopButton.MouseButton1Click:Connect(function()
 	setAimModeEnabled(false)
 	shopFrame.Visible = false
@@ -2005,8 +1880,6 @@ combatStateEvent.OnClientEvent:Connect(function(data)
 		return
 	end
 
-	local wasReloading = isReloading
-
 	if typeof(data.mag) == "number" then
 		ammoMag = math.max(0, math.floor(data.mag))
 	end
@@ -2015,24 +1888,10 @@ combatStateEvent.OnClientEvent:Connect(function(data)
 		ammoReserve = math.max(0, math.floor(data.reserve))
 	end
 
-	if typeof(data.reloading) == "boolean" then
-		isReloading = data.reloading
-	end
-
-	if typeof(data.fireRateMultiplier) == "number" then
-		currentFireRateMultiplier = math.max(0.1, data.fireRateMultiplier)
-	end
-
 	if typeof(data.equippedToolName) == "string" then
 		currentToolName = data.equippedToolName
 	end
-
-	if not wasReloading and isReloading then
-		local weaponKey, weapon = getCurrentWeapon()
-		if weaponKey and weapon and weapon.Category == "Ranged" then
-			playWeaponReloadAnimation(weaponKey)
-		end
-	end
+	weaponController:ApplyCombatState(data)
 
 	refreshCombatHud()
 end)
@@ -2154,7 +2013,7 @@ player.CharacterRemoving:Connect(function(character)
 	cleanupRightArmAimIK(character)
 	setAimModeEnabled(false)
 	hideReviveButtons()
-	leftMouseHeld = false
+	weaponController:HandlePrimaryUp()
 end)
 
 RunService.RenderStepped:Connect(function(deltaTime)
@@ -2170,19 +2029,7 @@ RunService.RenderStepped:Connect(function(deltaTime)
 	updateGameplayFacing(deltaTime)
 	updateGameplayCursorState()
 
-	if leftMouseHeld and not spectatorController:IsEnabled() and not hasBlockingUiOpen() and not isReloading then
-		local weaponKey, weapon = getCurrentWeapon()
-		if weaponKey and weapon and weapon.Category == "Ranged" then
-			local now = os.clock()
-			if now >= nextAutoFireAt then
-				if fireRangedWeaponOnce(weaponKey, weapon) then
-					nextAutoFireAt = now + math.max(0.03, ((weapon.FireCooldown or 0.1) / currentFireRateMultiplier) * 0.85)
-				else
-					nextAutoFireAt = now + 0.05
-				end
-			end
-		end
-	end
+	weaponController:Update()
 
 	local rightPressed = UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2)
 	if not spectatorController:IsEnabled() and aimModeEnabled and not rightPressed then

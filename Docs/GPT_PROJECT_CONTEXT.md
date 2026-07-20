@@ -127,6 +127,9 @@ src/shared
 - Combat Studio automatically runs `ReviveRuntimeTests`; the current suite covers 47 assertions and reports through `Workspace.ReviveRuntimeTestsPassed`.
 - Client `SpectatorController` owns downed/free-fly state, view-relative movement, RMB camera look, cursor policy, and gameplay-camera restoration.
 - Combat Studio automatically runs `SpectatorControllerTests`; the current suite covers 22 assertions and reports through `Workspace.SpectatorControllerTestsPassed`.
+- Client `WeaponController` owns held-fire cadence, fire-rate/reload state, ranged and melee dispatch, melee speed scaling, and reload requests.
+- Client `CombatInputController` owns LMB/RMB and keyboard routing between gameplay, spectator, shop, skills, and reload actions.
+- Combat Studio runs `WeaponControllerTests` (31 assertions) and `CombatInputControllerTests` (25 assertions).
 - `ReceiptRouter` is the sole owner of `MarketplaceService.ProcessReceipt`; revive products register handlers instead of replacing the callback.
 
 Важно: часть docs и task board устарели. Актуальный дизайн теперь в `GDD_V2.md`.

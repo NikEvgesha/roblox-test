@@ -15,7 +15,7 @@ Last updated: `2026-07-20`
 
 1. The ghost-enemy wave stall fix is published but still needs one full Wave 10 retest.
 2. Developer Product receipts exist but need a controlled live purchase test.
-3. The combat client remains oversized; spectator/free-fly is extracted, while weapon/input and UI still share `main.client.lua`.
+3. The combat client remains oversized; spectator, input, and weapon dispatch are extracted, while aiming/IK and UI still share `main.client.lua`.
 
 ## Next Queue
 
@@ -24,13 +24,13 @@ Last updated: `2026-07-20`
 | Done | Publish the ghost-enemy fix to Combat | You | Published owner load-test build includes the wave fix |
 | P0 | Retest Wave 10 completion | You + Assistant | Boss and all mobs die, run resolves, players return to Lobby |
 | P0 | Confirm Combat access | You | Maximum visitors `8`; `Secure within Universe only` |
-| Done | Add pure logic test modules | Assistant | Combat Studio passes 173 assertions across rules, waves, enemies, factory, revive, and spectator flow |
+| Done | Add pure logic test modules | Assistant | Combat Studio passes 229 assertions across eight server/client suites |
 | Done | Centralize Developer Product receipts | Assistant | `ReceiptRouter` is the only owner of `MarketplaceService.ProcessReceipt` |
 | Done | Extract wave director services | Assistant | `WaveDirector` owns wave selection, budgets, caps, cadence, and variant weights; Play Mode baseline verified |
 | Done | Extract enemy runtime service | Assistant | Registry, lifecycle, targeting, spawn-point selection, and ghost cleanup are isolated and Play Mode verified |
 | Done | Extract enemy factory | Assistant | Template/fallback creation, animation loading, health UI, and death callbacks are isolated and Play Mode verified |
 | Done | Extract revive runtime service | Assistant | Death, markers, free timers, wipe window, teammate/solo/team grants, and character wiring are isolated |
-| P1 | Extract combat client controllers | Assistant | Spectator is done; input/weapons and UI concerns are separated next |
+| P1 | Extract combat client controllers | Assistant | Spectator/input/weapon dispatch are done; aiming/IK and UI are separated next |
 | P2 | Select retained enemy/weapon assets | You | Explicit keep/remove list for Combat hierarchy |
 | P2 | Clean and profile Combat assets | Assistant | Unused pack content removed; scene metrics recorded |
 
