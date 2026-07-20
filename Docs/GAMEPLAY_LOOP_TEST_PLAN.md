@@ -48,6 +48,8 @@ Validate that the wave survival loop remains stable after each task and does not
 - Aim integration baseline: equipped R15 ranged combat creates and enables `RangedRightArmIK` with target/pole parts; spectator mode disables IK and crosshair, and revive restores the gameplay camera and crosshair.
 - UI integration baseline: shop payload updates money/status and obeys distance auto-close; skills payload opens with current points; combat feedback creates marker and projected damage text.
 - Ghost-state baseline: destroying one live enemy root and killing the remaining wave enemies produces `AliveZombies == 0` and advances to `Intermission`.
+- Wave 10 integration baseline (`2026-07-20`): accelerated Studio run visited Waves `1-10`; a rootless enemy injected on Wave 5 did not stall progression; Wave 10 spawned and killed the boss; the run ended with `Victory`, `RunResult`, and `AliveZombies == 0`; rewards recorded `+5` Crystals, `+1` BossKills, and `130` credited kills.
+- Studio cannot exercise the production victory teleport. The remaining end-to-end gate is one published-client Wave 10 completion followed by the delayed return to Lobby.
 
 ## Regression Matrix
 

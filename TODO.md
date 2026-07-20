@@ -13,7 +13,7 @@ Last updated: `2026-07-20`
 
 ## Current Blockers
 
-1. The ghost-enemy wave stall fix is published but still needs one full Wave 10 retest.
+1. Wave 10 passes in Studio; the published Roblox client still needs a victory-to-Lobby return test.
 2. Developer Product receipts exist but need a controlled live purchase test.
 
 ## Next Queue
@@ -21,7 +21,7 @@ Last updated: `2026-07-20`
 | Priority | Task | Owner | Exit Criteria |
 |---|---|---|---|
 | Done | Publish the ghost-enemy fix to Combat | You | Published owner load-test build includes the wave fix |
-| P0 | Retest Wave 10 completion | You + Assistant | Boss and all mobs die, run resolves, players return to Lobby |
+| P0 | Verify published Wave 10 victory return | You + Assistant | Studio already reaches `Victory`; published client returns players to Lobby after the result delay |
 | P0 | Confirm Combat access | You | Maximum visitors `8`; `Secure within Universe only` |
 | Done | Add pure logic test modules | Assistant | Combat Studio passes 343 assertions across thirteen server/client suites |
 | Done | Centralize Developer Product receipts | Assistant | `ReceiptRouter` is the only owner of `MarketplaceService.ProcessReceipt` |

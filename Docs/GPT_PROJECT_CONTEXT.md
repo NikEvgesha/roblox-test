@@ -112,6 +112,7 @@ src/shared
 - Debug all-weapons spawn is disabled; profession starter weapons and shop purchases now matter in prototype tests.
 - Published `Lobby -> Combat -> Lobby` routing was verified in the Roblox client on `2026-07-19`.
 - Wave completion prunes structurally invalid zombie states so detached Humanoids cannot leave `1 alive` forever.
+- A full accelerated Combat Studio run on `2026-07-20` reached Wave 10 `Victory`: a rootless enemy injected on Wave 5 was pruned, the boss awarded `+5` Crystals and `+1` BossKills, and the result ended at `AliveZombies = 0`. Only the published-client victory teleport remains to verify.
 - Wave spawn cadence uses `Zombies.WaveSpawnSpeedMultiplier = 10` for the current high-density prototype test.
 - Mob load controls spawn `1`, `10`, or `100` moving Walker enemies and grant invisible damage protection. They are available in Studio and in published servers only to UserIds explicitly listed in `Debug.EnemySpawnerAuthorizedUserIds`.
 - Gunner magazines and reload are disabled through `Ammo.MagazinesEnabled = false`; ranged shots still use profession resources where configured.

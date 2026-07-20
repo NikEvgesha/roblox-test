@@ -30,7 +30,7 @@ Last verified: `2026-07-20`
 | B-3 | Spawn boss every 10th wave | Assistant | Done | Config and wave director implemented |
 | B-4 | Fixed run target | Shared | Done | 10-wave cube test; 100-wave long target |
 | B-5 | Player-count and difficulty scaling for 1-8 | Assistant | Done | Party income/count and four difficulty tiers implemented |
-| B-6 | Complete 10-wave end-to-end playtest | Shared | In Progress | Ghost-enemy stall fixed locally; published retest pending |
+| B-6 | Complete 10-wave end-to-end playtest | Shared | In Progress | Studio reaches `Victory` with boss/rewards/ghost cleanup; published victory return pending |
 | B-7 | Accelerate prototype wave spawning | Assistant | Done | Configurable `x10` spawn cadence enabled |
 
 ## Epic C - Professions And Abilities
@@ -66,7 +66,7 @@ Last verified: `2026-07-20`
 | E-1 | Maintain smoke/regression plan | Assistant | Done | `Docs/GAMEPLAY_LOOP_TEST_PLAN.md` |
 | E-2 | Draft wave/shop/skills HUD | Assistant | Done | Prototype UI implemented |
 | E-3 | Final UI visual pass | You | Backlog | Starts after UX stabilizes |
-| E-4 | Run local smoke tests after milestones | Assistant | In Progress | Lobby and Combat boot cleanly |
+| E-4 | Run local smoke tests after milestones | Assistant | In Progress | Combat boots cleanly and completes the 10-wave Studio integration run |
 | E-5 | Spectator/free-fly while dead | Assistant | Done | Camera and movement prototype verified manually |
 | E-6 | Add automated Luau tests | Assistant | Done | 343 assertions across thirteen server/client suites |
 | E-7 | Split oversized runtime scripts | Assistant | Done | Combat entrypoint is 173 lines; HUD state and weapon animation controllers extracted |
