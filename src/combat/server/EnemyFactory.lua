@@ -4,6 +4,7 @@ local Workspace = game:GetService("Workspace")
 
 local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local gameRules = require(sharedFolder:WaitForChild("GameRules"))
+local ProceduralEnemyAnimator = require(script.Parent:WaitForChild("ProceduralEnemyAnimator"))
 
 local EnemyFactory = {}
 EnemyFactory.__index = EnemyFactory
@@ -385,9 +386,15 @@ function EnemyFactory:_prepareTemplateModel(position, variant, variantKey, healt
 		head = root
 	end
 
-	local _, boundsSize = model:GetBoundingBox()
+	local boundsCFrame, boundsSize = model:GetBoundingBox()
 	local groundY = self:_resolveGroundY(position)
-	local spawnPosition = Vector3.new(position.X, groundY + boundsSize.Y * 0.5 + 0.1 + (variant.FlyHeight or 0), position.Z)
+	local boundsBottomY = boundsCFrame.Position.Y - boundsSize.Y * 0.5
+	local rootHeightAboveBottom = math.max(0, root.Position.Y - boundsBottomY)
+	local spawnPosition = Vector3.new(
+		position.X,
+		groundY + rootHeightAboveBottom + 0.1 + (variant.FlyHeight or 0),
+		position.Z
+	)
 
 	model.Name = "Zombie_" .. variantKey
 	model:SetAttribute("IsZombie", true)
@@ -649,7 +656,8 @@ function EnemyFactory:Create(position, requestedVariantKey, stage)
 
 	model.Parent = self.enemyFolder
 	model:SetAttribute("IsBossZombie", variant.IsBoss == true)
-	local animationTracks = self:_buildAnimationTracks(model, humanoid)
+	local proceduralAnimation = ProceduralEnemyAnimator.Capture(model, variant.ProceduralAnimationStyle)
+	local animationTracks = proceduralAnimation and nil or self:_buildAnimationTracks(model, humanoid)
 	self:_attachHealthBar(model, humanoid, head, variant.DisplayName or variantKey)
 
 	local state = {
@@ -657,6 +665,7 @@ function EnemyFactory:Create(position, requestedVariantKey, stage)
 		humanoid = humanoid,
 		root = root,
 		animationTracks = animationTracks,
+		proceduralAnimation = proceduralAnimation,
 		variantKey = variantKey,
 		variant = variant,
 		moveSpeed = moveSpeed,

@@ -112,7 +112,10 @@ src/shared
 - Debug all-weapons spawn is disabled; profession starter weapons and shop purchases now matter in prototype tests.
 - Published `Lobby -> Combat -> Lobby` routing was verified in the Roblox client on `2026-07-19`.
 - Wave completion prunes structurally invalid zombie states so detached Humanoids cannot leave `1 alive` forever.
-- A full accelerated Combat Studio run on `2026-07-20` reached Wave 10 `Victory`: a rootless enemy injected on Wave 5 was pruned, the boss awarded `+5` Crystals and `+1` BossKills, and the result ended at `AliveZombies = 0`. Only the published-client victory teleport remains to verify.
+- A full accelerated Combat Studio run on `2026-07-20` reached Wave 10 `Victory`: a rootless enemy injected on Wave 5 was pruned, the boss awarded `+5` Crystals and `+1` BossKills, and the result ended at `AliveZombies = 0`.
+- The owner subsequently verified the published Wave 10 victory and delayed return to Lobby. The end-to-end cube run gate is closed.
+- The current practical load baseline is `500` active mobs without unacceptable slowdown; higher counts are optional stress territory.
+- Three generated visual-direction examples live under `Workspace.Enemy.CodexProceduralExamples`: `Codex Shardling` (scuttle), `Codex Moss Brute` (stomp), and `Codex Ember Wisp` (hover/orbit). Runtime variants use `ProceduralEnemyAnimator`, and the authorized debug panel has one-spawn preview buttons for each.
 - Wave spawn cadence uses `Zombies.WaveSpawnSpeedMultiplier = 10` for the current high-density prototype test.
 - Mob load controls spawn `1`, `10`, or `100` moving Walker enemies and grant invisible damage protection. They are available in Studio and in published servers only to UserIds explicitly listed in `Debug.EnemySpawnerAuthorizedUserIds`.
 - Gunner magazines and reload are disabled through `Ammo.MagazinesEnabled = false`; ranged shots still use profession resources where configured.
@@ -123,7 +126,7 @@ src/shared
 - Server `EnemyRuntime` owns the enemy registry, alive-state validation, ghost-state pruning, nearest-target lookup, spawn-point selection, and active-enemy iteration.
 - Combat Studio automatically runs `EnemyRuntimeTests`; the current suite covers 18 assertions and reports through `Workspace.EnemyRuntimeTestsPassed`.
 - Server `EnemyFactory` owns template/fallback model construction, scaling, health bars, animation loading/cleanup, state assembly, and death lifecycle callbacks.
-- Combat Studio automatically runs `EnemyFactoryTests`; the current suite covers 41 assertions and reports through `Workspace.EnemyFactoryTestsPassed`.
+- Combat Studio automatically runs `EnemyFactoryTests`; the current suite covers 42 assertions and reports through `Workspace.EnemyFactoryTestsPassed`.
 - Server `ReviveRuntime` owns player life/downed state, markers, free-respawn timers, wipe-window timing, teammate revive, paid grant policy, and character death wiring.
 - Combat Studio automatically runs `ReviveRuntimeTests`; the current suite covers 47 assertions and reports through `Workspace.ReviveRuntimeTestsPassed`.
 - Client `SpectatorController` owns downed/free-fly state, view-relative movement, RMB camera look, cursor policy, and gameplay-camera restoration.
@@ -138,6 +141,7 @@ src/shared
 - Client `CombatFeedbackController` owns hit markers, optional hit-confirm audio, projected damage numbers, and their lifetimes.
 - Client `WeaponAnimationController` owns animation-track caching plus ranged/melee playback timing.
 - Combat Studio runs `CombatHudViewTests` (19), `CombatHudControllerTests` (34), `CombatFeedbackControllerTests` (18), and `WeaponAnimationControllerTests` (17 assertions).
+- Combat Studio runs `ProceduralEnemyAnimatorTests` with 21 assertions; the full automated baseline is 365 assertions across fourteen suites.
 - `ReceiptRouter` is the sole owner of `MarketplaceService.ProcessReceipt`; revive products register handlers instead of replacing the callback.
 
 Важно: часть docs и task board устарели. Актуальный дизайн теперь в `GDD_V2.md`.

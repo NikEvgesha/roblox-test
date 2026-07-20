@@ -13,6 +13,7 @@ local profileStore = require(sharedFolder:WaitForChild("ProfileStore"))
 local receiptRouter = require(script.Parent:WaitForChild("ReceiptRouter"))
 local EnemyFactory = require(script.Parent:WaitForChild("EnemyFactory"))
 local EnemyRuntime = require(script.Parent:WaitForChild("EnemyRuntime"))
+local ProceduralEnemyAnimator = require(script.Parent:WaitForChild("ProceduralEnemyAnimator"))
 local ReviveRuntime = require(script.Parent:WaitForChild("ReviveRuntime"))
 local WaveDirector = require(script.Parent:WaitForChild("WaveDirector"))
 
@@ -213,6 +214,10 @@ local reviveRuntime
 local endMatch
 
 local function cleanupEnemyState(state)
+	if state and state.proceduralAnimation then
+		ProceduralEnemyAnimator.Reset(state.proceduralAnimation)
+		state.proceduralAnimation = nil
+	end
 	if enemyFactory then
 		enemyFactory:CleanupAnimationTracks(state)
 	elseif state and state.animationTracks then
@@ -1294,6 +1299,7 @@ local function spawnZombieFromPoint()
 end
 
 local debugSpawnCounts = { [1] = true, [10] = true, [100] = true }
+local debugPreviewVariants = { Shardling = true, MossBrute = true, EmberWisp = true }
 local debugSpawnCooldownByUserId = {}
 
 debugEnemySpawnEvent.OnServerEvent:Connect(function(player, requestedCount)
@@ -1301,9 +1307,21 @@ debugEnemySpawnEvent.OnServerEvent:Connect(function(player, requestedCount)
 		return
 	end
 
-	local count = math.floor(tonumber(requestedCount) or 0)
+	local variantKey = "Walker"
+	local countValue = requestedCount
+	if typeof(requestedCount) == "table" then
+		countValue = requestedCount.count
+		local requestedVariant = tostring(requestedCount.variant or "")
+		if debugPreviewVariants[requestedVariant] then
+			variantKey = requestedVariant
+		end
+	end
+	local count = math.floor(tonumber(countValue) or 0)
 	if not debugSpawnCounts[count] then
 		return
+	end
+	if variantKey ~= "Walker" then
+		count = 1
 	end
 
 	local now = os.clock()
@@ -1320,7 +1338,7 @@ debugEnemySpawnEvent.OnServerEvent:Connect(function(player, requestedCount)
 		for index = 1, count do
 			local point = getRandomSpawnPoint()
 			if point then
-				createZombie(point.Position, "Walker", stage)
+				createZombie(point.Position, variantKey, stage)
 				spawned += 1
 			end
 
@@ -1332,6 +1350,7 @@ debugEnemySpawnEvent.OnServerEvent:Connect(function(player, requestedCount)
 		debugEnemySpawnEvent:FireClient(player, {
 			requested = count,
 			spawned = spawned,
+			variant = variantKey,
 		})
 	end)
 end)
@@ -1430,6 +1449,7 @@ local function triggerZombieAttackAnimation(state, now)
 	local currentTime = now or os.clock()
 	state.attackAnimStartedAt = currentTime
 	state.attackAnimEndsAt = currentTime + state.attackAnimDuration
+	ProceduralEnemyAnimator.TriggerAttack(state.proceduralAnimation, currentTime, state.attackAnimDuration)
 
 	local tracks = state.animationTracks
 	if tracks and tracks.attack then
@@ -1439,6 +1459,7 @@ local function triggerZombieAttackAnimation(state, now)
 end
 
 local function buildZombiePoseCFrame(state, basePosition, lookForward, isMoving, now, deltaTime)
+	ProceduralEnemyAnimator.Update(state.proceduralAnimation, isMoving, now, state.moveSpeed)
 	if state.animationTracks then
 		return CFrame.lookAt(basePosition, basePosition + lookForward)
 	end

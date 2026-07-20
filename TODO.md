@@ -13,23 +13,24 @@ Last updated: `2026-07-20`
 
 ## Current Blockers
 
-1. Wave 10 passes in Studio; the published Roblox client still needs a victory-to-Lobby return test.
-2. Developer Product receipts exist but need a controlled live purchase test.
+1. Developer Product receipts exist but need a controlled live purchase test.
 
 ## Next Queue
 
 | Priority | Task | Owner | Exit Criteria |
 |---|---|---|---|
 | Done | Publish the ghost-enemy fix to Combat | You | Published owner load-test build includes the wave fix |
-| P0 | Verify published Wave 10 victory return | You + Assistant | Studio already reaches `Victory`; published client returns players to Lobby after the result delay |
+| Done | Verify published Wave 10 victory return | You + Assistant | Owner confirmed the published victory flow returns players to Lobby |
 | P0 | Confirm Combat access | You | Maximum visitors `8`; `Secure within Universe only` |
-| Done | Add pure logic test modules | Assistant | Combat Studio passes 343 assertions across thirteen server/client suites |
+| Done | Add pure logic test modules | Assistant | Combat Studio passes 365 assertions across fourteen server/client suites |
 | Done | Centralize Developer Product receipts | Assistant | `ReceiptRouter` is the only owner of `MarketplaceService.ProcessReceipt` |
 | Done | Extract wave director services | Assistant | `WaveDirector` owns wave selection, budgets, caps, cadence, and variant weights; Play Mode baseline verified |
 | Done | Extract enemy runtime service | Assistant | Registry, lifecycle, targeting, spawn-point selection, and ghost cleanup are isolated and Play Mode verified |
 | Done | Extract enemy factory | Assistant | Template/fallback creation, animation loading, health UI, and death callbacks are isolated and Play Mode verified |
 | Done | Extract revive runtime service | Assistant | Death, markers, free timers, wipe window, teammate/solo/team grants, and character wiring are isolated |
 | Done | Extract combat client controllers | Assistant | 173-line entrypoint wires dedicated input, aim, weapon, animation, HUD, feedback, and spectator controllers |
+| P1 | Evaluate procedural enemy examples | You | Spawn Shardling, Moss Brute, and Ember Wisp from the debug panel and judge silhouette/animation direction |
+| Done | Establish mob performance baseline | Shared | Owner reports stable play at `500` active mobs; higher counts are optional stress territory |
 | P2 | Select retained enemy/weapon assets | You | Explicit keep/remove list for Combat hierarchy |
 | P2 | Clean and profile Combat assets | Assistant | Unused pack content removed; scene metrics recorded |
 
@@ -58,4 +59,4 @@ Last updated: `2026-07-20`
 - [ ] Publish Lobby and Combat from the group-owned Experience.
 - [x] Launch from the Roblox client through the Lobby Start Place.
 - [x] Verify the Lobby to Combat to Lobby route.
-- [ ] Verify selected profession/difficulty, Wave 10 rewards, and clean run completion.
+- [x] Verify selected profession/difficulty, Wave 10 rewards, and clean run completion.

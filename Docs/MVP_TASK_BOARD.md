@@ -30,7 +30,7 @@ Last verified: `2026-07-20`
 | B-3 | Spawn boss every 10th wave | Assistant | Done | Config and wave director implemented |
 | B-4 | Fixed run target | Shared | Done | 10-wave cube test; 100-wave long target |
 | B-5 | Player-count and difficulty scaling for 1-8 | Assistant | Done | Party income/count and four difficulty tiers implemented |
-| B-6 | Complete 10-wave end-to-end playtest | Shared | In Progress | Studio reaches `Victory` with boss/rewards/ghost cleanup; published victory return pending |
+| B-6 | Complete 10-wave end-to-end playtest | Shared | Done | Published Wave 10 victory and return to Lobby verified by owner |
 | B-7 | Accelerate prototype wave spawning | Assistant | Done | Configurable `x10` spawn cadence enabled |
 
 ## Epic C - Professions And Abilities
@@ -68,11 +68,12 @@ Last verified: `2026-07-20`
 | E-3 | Final UI visual pass | You | Backlog | Starts after UX stabilizes |
 | E-4 | Run local smoke tests after milestones | Assistant | In Progress | Combat boots cleanly and completes the 10-wave Studio integration run |
 | E-5 | Spectator/free-fly while dead | Assistant | Done | Camera and movement prototype verified manually |
-| E-6 | Add automated Luau tests | Assistant | Done | 343 assertions across thirteen server/client suites |
+| E-6 | Add automated Luau tests | Assistant | Done | 365 assertions across fourteen server/client suites |
 | E-7 | Split oversized runtime scripts | Assistant | Done | Combat entrypoint is 173 lines; HUD state and weapon animation controllers extracted |
 | E-8 | Remove unused enemy-pack overhead | Shared | Backlog | You select retained assets; Assistant cleans hierarchy |
-| E-9 | Profile target combat wave | Shared | In Progress | Owner load-test controls work; record the practical mob/FPS limit |
+| E-9 | Profile target combat wave | Shared | Done | Owner reports stable play at `500` active mobs; higher counts remain possible |
 | E-10 | Add authorized mob load controls | Shared | Done | Studio and owner-only published buttons for `1/10/100` verified by owner |
+| E-11 | Evaluate procedural enemy visual direction | Shared | In Progress | Shardling, Moss Brute, and Ember Wisp examples await owner feel/visual review |
 
 ## Epic F - Tooling And Release
 

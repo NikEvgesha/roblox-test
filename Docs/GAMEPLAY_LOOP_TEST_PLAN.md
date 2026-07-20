@@ -23,15 +23,16 @@ Validate that the wave survival loop remains stable after each task and does not
 | SMK-13 | Ghost enemy cleanup | Detach a living enemy Humanoid after all spawns finish | Invalid state is pruned and the wave resolves |
 | SMK-14 | Authorized mob load controls | Click `Spawn 1`, `Spawn 10`, and `Spawn 100` in Combat Studio or as an authorized published user | Requested moving enemies spawn; tester remains alive; unauthorized users have no panel |
 | SMK-15 | Gunner unlimited ammunition | Fire ranged weapons continuously and press `R` | Shots do not stop, no ammo HUD appears, and reload does not run |
+| SMK-16 | Procedural enemy previews | Use the `Shardling`, `Moss Brute`, and `Ember Wisp` debug buttons | Each dedicated template spawns, moves, and plays its distinct procedural locomotion/attack style |
 
 ## Automated Studio Tests
 
-- Combat Studio runs thirteen automated suites: five server services plus spectator, weapon, weapon animation, input, aim, HUD view, HUD state, and feedback.
+- Combat Studio runs fourteen automated suites: six server services plus spectator, weapon, weapon animation, input, aim, HUD view, HUD state, and feedback.
 - Passing state: all corresponding `Workspace.*TestsPassed` attributes are `true`.
 - `GameRulesTests`: `26` assertions for party rewards, XP progression, difficulty/stat scaling, respawn timing, meta costs, and ability upgrades.
 - `WaveDirectorTests`: `19` assertions for wave lookup, boss cadence, spawn budgets, party/difficulty scaling, alive caps, spawn intervals, and variant weights.
 - `EnemyRuntimeTests`: `18` assertions for registration, alive-state pruning, cleanup, nearest-target lookup, spawn-point safety, iteration, and full clear.
-- `EnemyFactoryTests`: `41` assertions for fallback/template construction, scaling, state fields, health UI, callbacks, boss data, and animation cleanup.
+- `EnemyFactoryTests`: `42` assertions for fallback/template construction, grounded placement, scaling, state fields, health UI, callbacks, boss data, and animation cleanup.
 - `ReviveRuntimeTests`: `47` assertions for death tokens, escalating free timers, markers, stale-timer rejection, teammate revive, wipe policy, team grant, timeout, and run cleanup.
 - `SpectatorControllerTests`: `22` assertions for downed transitions, RMB-look cursor state, view-relative movement, and gameplay-camera restoration.
 - `WeaponControllerTests`: `31` assertions for held fire, cadence multipliers, reload state, ranged dispatch, melee dispatch, and blocking states.
@@ -41,15 +42,17 @@ Validate that the wave survival loop remains stable after each task and does not
 - `CombatHudControllerTests`: `34` assertions for weapon/ammo state, XP and health formatting, shop/skills payloads, blocking UI, and revive transitions.
 - `CombatFeedbackControllerTests`: `18` assertions for hit routing, marker colors/lifetime, damage-number projection/text/lifetime, invalid payloads, and cleanup.
 - `WeaponAnimationControllerTests`: `17` assertions for track caching, ranged speed, melee cooldown scaling, scheduled stops, and invalid definitions.
+- `ProceduralEnemyAnimatorTests`: `21` assertions for style capture, 30 Hz throttling, locomotion transforms, attack poses, orbit offsets, and reset behavior.
 - Play Mode baseline: Medium solo Wave 1 reports budget `8`, alive cap `14`, spawn interval `0.29`, and creates `8` enemies.
 - Factory baseline: every Wave 1 enemy has a root, Humanoid, and health bar; killing all enemies advances to `Intermission`.
-- Revive baseline: solo death creates one downed marker and changes `WaveState` to `WipeWindow`; a fresh Combat boot reports all thirteen suites passing.
+- Revive baseline: solo death creates one downed marker and changes `WaveState` to `WipeWindow`; a fresh Combat boot reports all fourteen suites passing.
 - Spectator integration baseline: a `respawn` event switches to `Scriptable` camera and shows status; `respawn_clear` restores `Custom` camera with the local `Humanoid` as subject.
 - Aim integration baseline: equipped R15 ranged combat creates and enables `RangedRightArmIK` with target/pole parts; spectator mode disables IK and crosshair, and revive restores the gameplay camera and crosshair.
 - UI integration baseline: shop payload updates money/status and obeys distance auto-close; skills payload opens with current points; combat feedback creates marker and projected damage text.
 - Ghost-state baseline: destroying one live enemy root and killing the remaining wave enemies produces `AliveZombies == 0` and advances to `Intermission`.
 - Wave 10 integration baseline (`2026-07-20`): accelerated Studio run visited Waves `1-10`; a rootless enemy injected on Wave 5 did not stall progression; Wave 10 spawned and killed the boss; the run ended with `Victory`, `RunResult`, and `AliveZombies == 0`; rewards recorded `+5` Crystals, `+1` BossKills, and `130` credited kills.
-- Studio cannot exercise the production victory teleport. The remaining end-to-end gate is one published-client Wave 10 completion followed by the delayed return to Lobby.
+- Published victory baseline (`2026-07-20`): owner confirmed that Wave 10 completes and the delayed return to Lobby works after publishing.
+- Load baseline (`2026-07-20`): owner reports stable play at `500` active mobs; higher counts are possible but are outside the current target.
 
 ## Regression Matrix
 
