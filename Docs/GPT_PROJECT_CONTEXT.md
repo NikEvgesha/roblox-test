@@ -132,6 +132,9 @@ src/shared
 - Combat Studio runs `WeaponControllerTests` (31 assertions) and `CombatInputControllerTests` (25 assertions).
 - Client `AimController` owns mouse UnitRay/raycast aiming, RMB enemy lock, character facing, head pitch/yaw, right-arm IK, crosshair/cursor policy, and neutral recoil state.
 - Combat Studio runs `AimControllerTests` with 26 assertions; the live R15 smoke test verifies active `RangedRightArmIK` target/pole and spectator disable/restore behavior.
+- Client `CombatHudView` owns construction of the draft HUD, crosshair, revive controls, shop, and run-skills hierarchy.
+- Client `CombatFeedbackController` owns hit markers, optional hit-confirm audio, projected damage numbers, and their lifetimes.
+- Combat Studio runs `CombatHudViewTests` (19 assertions) and `CombatFeedbackControllerTests` (18 assertions).
 - `ReceiptRouter` is the sole owner of `MarketplaceService.ProcessReceipt`; revive products register handlers instead of replacing the callback.
 
 Важно: часть docs и task board устарели. Актуальный дизайн теперь в `GDD_V2.md`.
