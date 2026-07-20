@@ -11,6 +11,7 @@ local combatConfig = require(sharedFolder:WaitForChild("CombatConfig"))
 local gameRules = require(sharedFolder:WaitForChild("GameRules"))
 local profileStore = require(sharedFolder:WaitForChild("ProfileStore"))
 local receiptRouter = require(script.Parent:WaitForChild("ReceiptRouter"))
+local BossAbilityRuntime = require(script.Parent:WaitForChild("BossAbilityRuntime"))
 local EnemyFactory = require(script.Parent:WaitForChild("EnemyFactory"))
 local EnemyRuntime = require(script.Parent:WaitForChild("EnemyRuntime"))
 local ReviveRuntime = require(script.Parent:WaitForChild("ReviveRuntime"))
@@ -209,10 +210,14 @@ local startSpawn = ensureStartSpawn()
 
 local enemyFactory
 local enemyRuntime
+local bossAbilityRuntime
 local reviveRuntime
 local endMatch
 
 local function cleanupEnemyState(state)
+	if bossAbilityRuntime and state then
+		bossAbilityRuntime:Cleanup(state)
+	end
 	if state and state.proceduralAnimation then
 		state.proceduralAnimation = nil
 	end
@@ -1281,7 +1286,9 @@ local function spawnZombieFromPoint()
 
 	local variantKey
 	if matchState.waveBossSpawnsRemaining > 0 then
-		local configuredBoss = zombieConfig.BossVariantKey or "BossBrute"
+		local configuredBoss = waveDirector:GetBossVariantKey(matchState.waveNumber)
+			or zombieConfig.BossVariantKey
+			or "BossBrute"
 		if variantConfig[configuredBoss] then
 			variantKey = configuredBoss
 		else
@@ -1297,7 +1304,6 @@ local function spawnZombieFromPoint()
 end
 
 local debugSpawnCounts = { [1] = true, [10] = true, [100] = true }
-local debugPreviewVariants = { Shardling = true, MossBrute = true, EmberWisp = true, AnimatedTroll = true }
 local debugSpawnCooldownByUserId = {}
 
 debugEnemySpawnEvent.OnServerEvent:Connect(function(player, requestedCount)
@@ -1310,7 +1316,7 @@ debugEnemySpawnEvent.OnServerEvent:Connect(function(player, requestedCount)
 	if typeof(requestedCount) == "table" then
 		countValue = requestedCount.count
 		local requestedVariant = tostring(requestedCount.variant or "")
-		if debugPreviewVariants[requestedVariant] then
+		if variantConfig[requestedVariant] then
 			variantKey = requestedVariant
 		end
 	end
@@ -1495,6 +1501,22 @@ local function buildZombiePoseCFrame(state, basePosition, lookForward, isMoving,
 	return CFrame.lookAt(adjustedPosition, adjustedPosition + lookForward) * CFrame.Angles(pitch, 0, roll)
 end
 
+bossAbilityRuntime = BossAbilityRuntime.new({
+	abilities = zombieConfig.BossAbilities,
+	zombiesFolder = zombiesFolder,
+	downedFolder = downedFolder,
+	isEncounterActive = function()
+		return not matchState.ended and matchState.waveActive and not reviveRuntime:IsWipeActive()
+	end,
+	onCast = function(state)
+		triggerZombieAttackAnimation(state, os.clock())
+	end,
+	spawnEnemy = function(position, variantKey)
+		local stage = waveDirector:GetDifficultyStage(math.max(1, matchState.waveNumber))
+		createZombie(position, variantKey, stage)
+	end,
+})
+
 task.spawn(function()
 	while true do
 		if matchState.ended then
@@ -1541,6 +1563,9 @@ RunService.Heartbeat:Connect(function(deltaTime)
 
 		local _, targetHumanoid, targetRoot, distance = getNearestPlayer(root.Position)
 		if targetHumanoid and targetRoot and distance < math.huge then
+			if state.isBoss then
+				bossAbilityRuntime:TryCast(state, now)
+			end
 			local targetPosition = targetRoot.Position
 			if state.isFlyer then
 				targetPosition = targetPosition + Vector3.new(0, state.flyHeight, 0)
@@ -1563,7 +1588,7 @@ RunService.Heartbeat:Connect(function(deltaTime)
 				spawnSpitProjectile(state, targetRoot.Position + Vector3.new(0, 1.4, 0))
 			end
 
-			local isMoving = movementDistance > state.attackRange
+			local isMoving = not state.bossAbilityBusy and movementDistance > state.attackRange
 			local basePosition = root.Position
 
 			if isMoving then
@@ -1577,7 +1602,7 @@ RunService.Heartbeat:Connect(function(deltaTime)
 				end
 			end
 
-			if not isMoving then
+			if not isMoving and not state.bossAbilityBusy then
 				if now - state.lastAttack >= state.attackCooldown then
 					state.lastAttack = now
 					triggerZombieAttackAnimation(state, now)

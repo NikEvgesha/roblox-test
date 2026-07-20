@@ -116,6 +116,9 @@ src/shared
 - The owner subsequently verified the published Wave 10 victory and delayed return to Lobby. The end-to-end cube run gate is closed.
 - The current practical load baseline is `500` active mobs without unacceptable slowdown; higher counts are optional stress territory.
 - Four visual-direction examples live under `Workspace.Enemy.CodexProceduralExamples`: `Codex Shardling` (scuttle), `Codex Moss Brute` (stomp), and `Codex Ember Wisp` (hover/orbit) use procedural Motor6D animation; `Codex Animated Troll` uses standard Roblox AnimationTracks for walk and attack. Procedural `Motor6D.Transform` updates run locally through `procedural_enemy_animator.client.lua` because Transform does not replicate from the server; the server replicates only tags, style/speed attributes, and an attack serial. The authorized debug panel has one-spawn preview buttons for all four so the approaches can be compared under the same AI/runtime conditions.
+- `Workspace.Enemy.CodexMobCollection` contains 20 additional animated mob templates and four boss templates. `DebugMobPreviewOrder` drives a single cycle button for roster review; dedicated buttons spawn each boss.
+- Two additional variants enter the cumulative spawn pool on each Wave 1-10. Boss waves rotate `Stone Titan -> Storm Colossus -> Flame Warden -> Brood Queen` and wrap after Wave 40.
+- `BossAbilityRuntime` owns server-visible telegraphs and delayed effects: stun rockfall circles, expanding knockback shockwave, three flame lanes, and brood summon portals. Stun temporarily zeros movement/jump and restores prior values after expiration; death cleanup removes outstanding boss telegraphs.
 - Wave spawn cadence uses `Zombies.WaveSpawnSpeedMultiplier = 10` for the current high-density prototype test.
 - Mob load controls spawn `1`, `10`, or `100` moving Walker enemies and grant invisible damage protection. They are available in Studio and in published servers only to UserIds explicitly listed in `Debug.EnemySpawnerAuthorizedUserIds`.
 - Gunner magazines and reload are disabled through `Ammo.MagazinesEnabled = false`; ranged shots still use profession resources where configured.
@@ -141,7 +144,7 @@ src/shared
 - Client `CombatFeedbackController` owns hit markers, optional hit-confirm audio, projected damage numbers, and their lifetimes.
 - Client `WeaponAnimationController` owns animation-track caching plus ranged/melee playback timing.
 - Combat Studio runs `CombatHudViewTests` (19), `CombatHudControllerTests` (34), `CombatFeedbackControllerTests` (18), and `WeaponAnimationControllerTests` (17 assertions).
-- Combat Studio runs `ProceduralEnemyAnimatorTests` with 25 assertions; the full automated baseline is 369 assertions across fourteen suites.
+- Combat Studio runs `ProceduralEnemyAnimatorTests` with 25 assertions and `BossAbilityRuntimeTests` with 9 assertions; the full automated baseline is 389 assertions across fifteen suites.
 - `ReceiptRouter` is the sole owner of `MarketplaceService.ProcessReceipt`; revive products register handlers instead of replacing the callback.
 
 Важно: часть docs и task board устарели. Актуальный дизайн теперь в `GDD_V2.md`.

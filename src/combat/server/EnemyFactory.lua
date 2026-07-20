@@ -667,6 +667,9 @@ function EnemyFactory:Create(position, requestedVariantKey, stage)
 		model:SetAttribute("ProceduralAnimationAttackStartedAt", 0)
 		model:SetAttribute("ProceduralAnimationAttackDuration", attackAnimationDuration)
 	end
+	if type(variant.BossAbility) == "string" then
+		model:SetAttribute("BossAbility", variant.BossAbility)
+	end
 
 	model.Parent = self.enemyFolder
 	if proceduralAnimationStyle then
@@ -711,6 +714,9 @@ function EnemyFactory:Create(position, requestedVariantKey, stage)
 		explosionTriggerRange = variant.ExplosionTriggerRange or 0,
 		flyHeight = variant.FlyHeight or 0,
 		isBoss = variant.IsBoss == true,
+		bossAbilityKey = type(variant.BossAbility) == "string" and variant.BossAbility or nil,
+		bossAbilityBusy = false,
+		nextBossAbilityAt = nil,
 		visualPhase = math.random() * math.pi * 2,
 		attackAnimDuration = attackAnimationDuration,
 		attackAnimStartedAt = 0,

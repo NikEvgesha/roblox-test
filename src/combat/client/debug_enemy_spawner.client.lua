@@ -34,7 +34,7 @@ local frame = Instance.new("Frame")
 frame.Name = "Panel"
 frame.AnchorPoint = Vector2.new(1, 0)
 frame.Position = UDim2.new(1, -18, 0, 190)
-frame.Size = UDim2.fromOffset(254, 238)
+frame.Size = UDim2.fromOffset(254, 390)
 frame.BackgroundColor3 = Color3.fromRGB(22, 25, 29)
 frame.BackgroundTransparency = 0.08
 frame.BorderSizePixel = 0
@@ -100,10 +100,49 @@ comparisonRow.Size = UDim2.new(1, -24, 0, 34)
 comparisonRow.BackgroundTransparency = 1
 comparisonRow.Parent = frame
 
+local rosterRow = Instance.new("Frame")
+rosterRow.Name = "RosterRow"
+rosterRow.Position = UDim2.fromOffset(12, 182)
+rosterRow.Size = UDim2.new(1, -24, 0, 34)
+rosterRow.BackgroundTransparency = 1
+rosterRow.Parent = frame
+
+local bossLabel = Instance.new("TextLabel")
+bossLabel.Name = "BossLabel"
+bossLabel.Position = UDim2.fromOffset(12, 222)
+bossLabel.Size = UDim2.new(1, -24, 0, 18)
+bossLabel.BackgroundTransparency = 1
+bossLabel.Font = Enum.Font.GothamBold
+bossLabel.Text = "BOSS ABILITY PREVIEWS"
+bossLabel.TextColor3 = Color3.fromRGB(232, 166, 116)
+bossLabel.TextSize = 12
+bossLabel.TextXAlignment = Enum.TextXAlignment.Left
+bossLabel.Parent = frame
+
+local bossRowOne = Instance.new("Frame")
+bossRowOne.Name = "BossRowOne"
+bossRowOne.Position = UDim2.fromOffset(12, 246)
+bossRowOne.Size = UDim2.new(1, -24, 0, 34)
+bossRowOne.BackgroundTransparency = 1
+bossRowOne.Parent = frame
+
+local bossRowTwo = bossRowOne:Clone()
+bossRowTwo.Name = "BossRowTwo"
+bossRowTwo.Position = UDim2.fromOffset(12, 286)
+bossRowTwo.Parent = frame
+
+for _, row in ipairs({ bossRowOne, bossRowTwo }) do
+	local layout = Instance.new("UIListLayout")
+	layout.FillDirection = Enum.FillDirection.Horizontal
+	layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+	layout.Padding = UDim.new(0, 8)
+	layout.Parent = row
+end
+
 local statusLabel = Instance.new("TextLabel")
 statusLabel.Name = "StatusLabel"
-statusLabel.Position = UDim2.fromOffset(12, 184)
-statusLabel.Size = UDim2.new(1, -24, 0, 42)
+statusLabel.Position = UDim2.fromOffset(12, 330)
+statusLabel.Size = UDim2.new(1, -24, 0, 48)
 statusLabel.BackgroundTransparency = 1
 statusLabel.Font = Enum.Font.Gotham
 statusLabel.Text = "Adds moving Walkers. Test damage protection is on."
@@ -168,6 +207,40 @@ createPreviewButton("Shardling", "Shardling", Color3.fromRGB(38, 133, 146))
 createPreviewButton("Moss Brute", "MossBrute", Color3.fromRGB(74, 112, 62))
 createPreviewButton("Ember Wisp", "EmberWisp", Color3.fromRGB(177, 83, 42))
 createPreviewButton("Animated Troll (tracks)", "AnimatedTroll", Color3.fromRGB(98, 78, 134), comparisonRow, 230)
+
+local mobPreviewOrder = combatConfig.Zombies.DebugMobPreviewOrder or {}
+local mobPreviewIndex = 0
+local nextMobButton = Instance.new("TextButton")
+nextMobButton.Name = "NextRosterMob"
+nextMobButton.Size = UDim2.fromOffset(230, 34)
+nextMobButton.BackgroundColor3 = Color3.fromRGB(45, 105, 118)
+nextMobButton.BorderSizePixel = 0
+nextMobButton.Font = Enum.Font.GothamBold
+nextMobButton.Text = ("Next roster mob (0/%d)"):format(#mobPreviewOrder)
+nextMobButton.TextColor3 = Color3.fromRGB(245, 248, 246)
+nextMobButton.TextSize = 12
+nextMobButton.Parent = rosterRow
+local nextMobCorner = Instance.new("UICorner")
+nextMobCorner.CornerRadius = UDim.new(0, 7)
+nextMobCorner.Parent = nextMobButton
+nextMobButton.MouseButton1Click:Connect(function()
+	if #mobPreviewOrder == 0 then
+		statusLabel.Text = "No roster preview variants configured."
+		return
+	end
+	mobPreviewIndex = (mobPreviewIndex % #mobPreviewOrder) + 1
+	local variantKey = mobPreviewOrder[mobPreviewIndex]
+	local variant = combatConfig.Zombies.Variants[variantKey] or {}
+	local displayName = variant.DisplayName or variantKey
+	nextMobButton.Text = ("Next: %s (%d/%d)"):format(displayName, mobPreviewIndex, #mobPreviewOrder)
+	statusLabel.Text = ("Requesting %s preview..."):format(displayName)
+	spawnEvent:FireServer({ count = 1, variant = variantKey })
+end)
+
+createPreviewButton("Stone Titan", "BossStoneTitan", Color3.fromRGB(123, 103, 78), bossRowOne, 111)
+createPreviewButton("Storm", "BossStormColossus", Color3.fromRGB(55, 120, 166), bossRowOne, 111)
+createPreviewButton("Flame", "BossFlameWarden", Color3.fromRGB(174, 73, 35), bossRowTwo, 111)
+createPreviewButton("Brood Queen", "BossBroodQueen", Color3.fromRGB(121, 55, 131), bossRowTwo, 111)
 
 spawnEvent.OnClientEvent:Connect(function(result)
 	if typeof(result) ~= "table" then

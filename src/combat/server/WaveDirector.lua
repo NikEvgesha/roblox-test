@@ -56,29 +56,58 @@ function WaveDirector:IsBossWave(waveNumber)
 end
 
 function WaveDirector:GetVariantWeights(waveNumber)
+	local wave = normalizeWave(waveNumber)
 	local waveEntry = self:GetWaveEntry(waveNumber)
-	if waveEntry and type(waveEntry.Weights) == "table" then
-		return waveEntry.Weights
-	end
-
-	local progressionStep = math.max(1, tonumber(self.config.DifficultyStepSeconds) or 1)
-	local progressionTime = self:GetDifficultyStage(waveNumber) * progressionStep
 	local chosenWeights = nil
+	if waveEntry and type(waveEntry.Weights) == "table" then
+		chosenWeights = waveEntry.Weights
+	else
+		local progressionStep = math.max(1, tonumber(self.config.DifficultyStepSeconds) or 1)
+		local progressionTime = self:GetDifficultyStage(waveNumber) * progressionStep
 
-	for _, entry in ipairs(self.difficultySchedule) do
-		local minTime = entry.MinTime
-		if minTime == nil and entry.MinWave ~= nil then
-			minTime = (entry.MinWave - 1) * progressionStep
-		end
-		minTime = minTime or 0
-		if progressionTime >= minTime then
-			chosenWeights = entry.Weights
-		else
-			break
+		for _, entry in ipairs(self.difficultySchedule) do
+			local minTime = entry.MinTime
+			if minTime == nil and entry.MinWave ~= nil then
+				minTime = (entry.MinWave - 1) * progressionStep
+			end
+			minTime = minTime or 0
+			if progressionTime >= minTime then
+				chosenWeights = entry.Weights
+			else
+				break
+			end
 		end
 	end
 
-	return chosenWeights or { Walker = 100 }
+	local mergedWeights = {}
+	for variantKey, weight in pairs(chosenWeights or { Walker = 100 }) do
+		mergedWeights[variantKey] = weight
+	end
+	for _, introduction in ipairs(self.config.VariantIntroductions or {}) do
+		if wave >= normalizeWave(introduction.MinWave) then
+			for variantKey, weight in pairs(introduction.Weights or {}) do
+				mergedWeights[variantKey] = (tonumber(mergedWeights[variantKey]) or 0) + (tonumber(weight) or 0)
+			end
+		end
+	end
+
+	return mergedWeights
+end
+
+function WaveDirector:GetBossVariantKey(waveNumber)
+	local wave = normalizeWave(waveNumber)
+	if not self:IsBossWave(wave) then
+		return nil
+	end
+
+	local order = self.config.BossVariantOrder
+	if type(order) ~= "table" or #order == 0 then
+		return self.config.BossVariantKey
+	end
+
+	local interval = math.max(1, math.floor(tonumber(self.config.BossWaveInterval) or 10))
+	local bossWaveIndex = math.floor(wave / interval)
+	return order[((bossWaveIndex - 1) % #order) + 1]
 end
 
 function WaveDirector:ComputeSpawnBudget(waveNumber, partySize, difficulty)
