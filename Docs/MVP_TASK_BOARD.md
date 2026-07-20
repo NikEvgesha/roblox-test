@@ -68,8 +68,8 @@ Last verified: `2026-07-20`
 | E-3 | Final UI visual pass | You | Backlog | Starts after UX stabilizes |
 | E-4 | Run local smoke tests after milestones | Assistant | In Progress | Lobby and Combat boot cleanly |
 | E-5 | Spectator/free-fly while dead | Assistant | Done | Camera and movement prototype verified manually |
-| E-6 | Add automated Luau tests | Assistant | Done | 292 assertions across eleven server/client suites |
-| E-7 | Split oversized runtime scripts | Assistant | In Progress | HUD view and combat feedback extracted; HUD/shop/skills state handlers remain |
+| E-6 | Add automated Luau tests | Assistant | Done | 343 assertions across thirteen server/client suites |
+| E-7 | Split oversized runtime scripts | Assistant | Done | Combat entrypoint is 173 lines; HUD state and weapon animation controllers extracted |
 | E-8 | Remove unused enemy-pack overhead | Shared | Backlog | You select retained assets; Assistant cleans hierarchy |
 | E-9 | Profile target combat wave | Shared | In Progress | Owner load-test controls work; record the practical mob/FPS limit |
 | E-10 | Add authorized mob load controls | Shared | Done | Studio and owner-only published buttons for `1/10/100` verified by owner |

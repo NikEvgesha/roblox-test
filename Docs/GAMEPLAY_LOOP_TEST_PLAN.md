@@ -26,7 +26,7 @@ Validate that the wave survival loop remains stable after each task and does not
 
 ## Automated Studio Tests
 
-- Combat Studio runs eleven automated suites: five server services plus spectator, weapon, input, aim, HUD view, and feedback.
+- Combat Studio runs thirteen automated suites: five server services plus spectator, weapon, weapon animation, input, aim, HUD view, HUD state, and feedback.
 - Passing state: all corresponding `Workspace.*TestsPassed` attributes are `true`.
 - `GameRulesTests`: `26` assertions for party rewards, XP progression, difficulty/stat scaling, respawn timing, meta costs, and ability upgrades.
 - `WaveDirectorTests`: `19` assertions for wave lookup, boss cadence, spawn budgets, party/difficulty scaling, alive caps, spawn intervals, and variant weights.
@@ -38,10 +38,12 @@ Validate that the wave survival loop remains stable after each task and does not
 - `CombatInputControllerTests`: `25` assertions for LMB/RMB routing, shop/skills shortcuts, reload, blocking UI, and spectator forwarding.
 - `AimControllerTests`: `26` assertions for aim state, strict crosshair visibility, nearest-target filtering, auto-lock, UnitRay/raycast fallback, cursor state, and blocking transitions.
 - `CombatHudViewTests`: `19` assertions for required hierarchy, default visibility, list layouts, health/XP elements, and magazine/unlimited-ammo layouts.
+- `CombatHudControllerTests`: `34` assertions for weapon/ammo state, XP and health formatting, shop/skills payloads, blocking UI, and revive transitions.
 - `CombatFeedbackControllerTests`: `18` assertions for hit routing, marker colors/lifetime, damage-number projection/text/lifetime, invalid payloads, and cleanup.
+- `WeaponAnimationControllerTests`: `17` assertions for track caching, ranged speed, melee cooldown scaling, scheduled stops, and invalid definitions.
 - Play Mode baseline: Medium solo Wave 1 reports budget `8`, alive cap `14`, spawn interval `0.29`, and creates `8` enemies.
 - Factory baseline: every Wave 1 enemy has a root, Humanoid, and health bar; killing all enemies advances to `Intermission`.
-- Revive baseline: solo death creates one downed marker and changes `WaveState` to `WipeWindow`; a fresh Combat boot reports all eleven suites passing.
+- Revive baseline: solo death creates one downed marker and changes `WaveState` to `WipeWindow`; a fresh Combat boot reports all thirteen suites passing.
 - Spectator integration baseline: a `respawn` event switches to `Scriptable` camera and shows status; `respawn_clear` restores `Custom` camera with the local `Humanoid` as subject.
 - Aim integration baseline: equipped R15 ranged combat creates and enables `RangedRightArmIK` with target/pole parts; spectator mode disables IK and crosshair, and revive restores the gameplay camera and crosshair.
 - UI integration baseline: shop payload updates money/status and obeys distance auto-close; skills payload opens with current points; combat feedback creates marker and projected damage text.
