@@ -1299,7 +1299,7 @@ local function spawnZombieFromPoint()
 end
 
 local debugSpawnCounts = { [1] = true, [10] = true, [100] = true }
-local debugPreviewVariants = { Shardling = true, MossBrute = true, EmberWisp = true }
+local debugPreviewVariants = { Shardling = true, MossBrute = true, EmberWisp = true, AnimatedTroll = true }
 local debugSpawnCooldownByUserId = {}
 
 debugEnemySpawnEvent.OnServerEvent:Connect(function(player, requestedCount)
@@ -1460,7 +1460,7 @@ end
 
 local function buildZombiePoseCFrame(state, basePosition, lookForward, isMoving, now, deltaTime)
 	ProceduralEnemyAnimator.Update(state.proceduralAnimation, isMoving, now, state.moveSpeed)
-	if state.animationTracks then
+	if state.animationTracks or state.proceduralAnimation then
 		return CFrame.lookAt(basePosition, basePosition + lookForward)
 	end
 

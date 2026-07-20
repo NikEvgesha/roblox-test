@@ -396,6 +396,7 @@ return {
 				MoveSpeedMul = 2.2,
 				DamageMul = 0.65,
 				RewardMul = 1.25,
+				AttackAnimationDuration = 0.38,
 			},
 			MossBrute = {
 				DisplayName = "Moss Brute",
@@ -406,6 +407,7 @@ return {
 				MoveSpeedMul = 0.68,
 				DamageMul = 1.6,
 				RewardMul = 1.8,
+				AttackAnimationDuration = 0.62,
 			},
 			EmberWisp = {
 				DisplayName = "Ember Wisp",
@@ -418,6 +420,17 @@ return {
 				MoveSpeedMul = 1.45,
 				DamageMul = 0.9,
 				RewardMul = 1.5,
+				AttackAnimationDuration = 0.45,
+			},
+			AnimatedTroll = {
+				DisplayName = "Animated Troll",
+				TemplateModelName = "Codex Animated Troll",
+				TemplateScale = 0.92,
+				HealthMul = 1.0,
+				MoveSpeedMul = 1.0,
+				DamageMul = 1.0,
+				RewardMul = 1.0,
+				AttackAnimationDuration = 0.65,
 			},
 			BossBrute = {
 				DisplayName = "Boss Brute",

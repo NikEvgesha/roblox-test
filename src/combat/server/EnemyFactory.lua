@@ -696,7 +696,7 @@ function EnemyFactory:Create(position, requestedVariantKey, stage)
 		flyHeight = variant.FlyHeight or 0,
 		isBoss = variant.IsBoss == true,
 		visualPhase = math.random() * math.pi * 2,
-		attackAnimDuration = 0.24,
+		attackAnimDuration = math.max(0.05, tonumber(variant.AttackAnimationDuration) or 0.24),
 		attackAnimStartedAt = 0,
 		attackAnimEndsAt = 0,
 		lastMoveAnimated = false,

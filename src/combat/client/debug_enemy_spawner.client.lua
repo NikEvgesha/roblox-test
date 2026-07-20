@@ -34,7 +34,7 @@ local frame = Instance.new("Frame")
 frame.Name = "Panel"
 frame.AnchorPoint = Vector2.new(1, 0)
 frame.Position = UDim2.new(1, -18, 0, 190)
-frame.Size = UDim2.fromOffset(254, 198)
+frame.Size = UDim2.fromOffset(254, 238)
 frame.BackgroundColor3 = Color3.fromRGB(22, 25, 29)
 frame.BackgroundTransparency = 0.08
 frame.BorderSizePixel = 0
@@ -93,9 +93,16 @@ previewLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 previewLayout.Padding = UDim.new(0, 7)
 previewLayout.Parent = previewRow
 
+local comparisonRow = Instance.new("Frame")
+comparisonRow.Name = "ComparisonRow"
+comparisonRow.Position = UDim2.fromOffset(12, 142)
+comparisonRow.Size = UDim2.new(1, -24, 0, 34)
+comparisonRow.BackgroundTransparency = 1
+comparisonRow.Parent = frame
+
 local statusLabel = Instance.new("TextLabel")
 statusLabel.Name = "StatusLabel"
-statusLabel.Position = UDim2.fromOffset(12, 144)
+statusLabel.Position = UDim2.fromOffset(12, 184)
 statusLabel.Size = UDim2.new(1, -24, 0, 42)
 statusLabel.BackgroundTransparency = 1
 statusLabel.Font = Enum.Font.Gotham
@@ -136,17 +143,17 @@ for _, count in ipairs({ 1, 10, 100 }) do
 	createSpawnButton(count)
 end
 
-local function createPreviewButton(label, variantKey, color)
+local function createPreviewButton(label, variantKey, color, parent, width)
 	local button = Instance.new("TextButton")
 	button.Name = "Preview" .. variantKey
-	button.Size = UDim2.fromOffset(72, 34)
+	button.Size = UDim2.fromOffset(width or 72, 34)
 	button.BackgroundColor3 = color
 	button.BorderSizePixel = 0
 	button.Font = Enum.Font.GothamBold
 	button.Text = label
 	button.TextColor3 = Color3.fromRGB(245, 248, 246)
 	button.TextSize = 12
-	button.Parent = previewRow
+	button.Parent = parent or previewRow
 
 	local corner = Instance.new("UICorner")
 	corner.CornerRadius = UDim.new(0, 7)
@@ -160,6 +167,7 @@ end
 createPreviewButton("Shardling", "Shardling", Color3.fromRGB(38, 133, 146))
 createPreviewButton("Moss Brute", "MossBrute", Color3.fromRGB(74, 112, 62))
 createPreviewButton("Ember Wisp", "EmberWisp", Color3.fromRGB(177, 83, 42))
+createPreviewButton("Animated Troll (tracks)", "AnimatedTroll", Color3.fromRGB(98, 78, 134), comparisonRow, 230)
 
 spawnEvent.OnClientEvent:Connect(function(result)
 	if typeof(result) ~= "table" then

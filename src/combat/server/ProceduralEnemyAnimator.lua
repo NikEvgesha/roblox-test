@@ -33,35 +33,81 @@ local function attackCurve(animation, now)
 end
 
 local function updateScuttle(animation, isMoving, now, moveSpeed)
-	local rate = isMoving and (8 + moveSpeed * 0.35) or 2
+	local movementWeight = isMoving and 1 or 0
+	local rate = isMoving and (7 + moveSpeed * 0.28) or 1.6
 	local phase = now * rate + animation.phaseOffset
-	local stride = math.sin(phase)
-	local opposite = math.sin(phase + math.pi)
-	local lift = math.abs(math.sin(phase * 2))
+	local stride = math.sin(phase) * movementWeight
+	local opposite = -stride
+	local leftLift = math.max(0, math.sin(phase)) * movementWeight
+	local rightLift = math.max(0, -math.sin(phase)) * movementWeight
 	local attack = attackCurve(animation, now)
 
-	setTransform(animation, "BodyMotor", CFrame.new(0, lift * 0.08, 0) * CFrame.Angles(0, stride * 0.08, stride * 0.05))
-	setTransform(animation, "LegFrontLeft", CFrame.Angles(stride * 0.55, 0, -0.18))
-	setTransform(animation, "LegBackRight", CFrame.Angles(stride * 0.55, 0, 0.18))
-	setTransform(animation, "LegFrontRight", CFrame.Angles(opposite * 0.55, 0, 0.18))
-	setTransform(animation, "LegBackLeft", CFrame.Angles(opposite * 0.55, 0, -0.18))
-	setTransform(animation, "MandibleLeft", CFrame.Angles(0, -attack * 0.65, 0))
-	setTransform(animation, "MandibleRight", CFrame.Angles(0, attack * 0.65, 0))
+	local idleBreath = math.sin(now * 2.1 + animation.phaseOffset) * 0.025
+	setTransform(
+		animation,
+		"BodyMotor",
+		CFrame.new(0, idleBreath, -attack * 0.42) * CFrame.Angles(attack * 0.18, stride * 0.1, stride * 0.06)
+	)
+	setTransform(
+		animation,
+		"LegFrontLeft",
+		CFrame.new(0, leftLift * 0.2, stride * 0.12) * CFrame.Angles(stride * 0.82, 0, -0.24)
+	)
+	setTransform(
+		animation,
+		"LegBackRight",
+		CFrame.new(0, leftLift * 0.2, stride * 0.12) * CFrame.Angles(stride * 0.82, 0, 0.24)
+	)
+	setTransform(
+		animation,
+		"LegFrontRight",
+		CFrame.new(0, rightLift * 0.2, opposite * 0.12) * CFrame.Angles(opposite * 0.82, 0, 0.24)
+	)
+	setTransform(
+		animation,
+		"LegBackLeft",
+		CFrame.new(0, rightLift * 0.2, opposite * 0.12) * CFrame.Angles(opposite * 0.82, 0, -0.24)
+	)
+	setTransform(animation, "MandibleLeft", CFrame.Angles(0, -attack * 0.95, -attack * 0.22))
+	setTransform(animation, "MandibleRight", CFrame.Angles(0, attack * 0.95, attack * 0.22))
 end
 
 local function updateStomp(animation, isMoving, now, moveSpeed)
-	local rate = isMoving and (3.4 + moveSpeed * 0.18) or 1.1
+	local movementWeight = isMoving and 1 or 0
+	local rate = isMoving and (3.1 + moveSpeed * 0.16) or 1.1
 	local phase = now * rate + animation.phaseOffset
-	local stride = math.sin(phase)
-	local impact = math.max(0, -math.sin(phase * 2))
+	local stride = math.sin(phase) * movementWeight
+	local leftLift = math.max(0, stride)
+	local rightLift = math.max(0, -stride)
 	local attack = attackCurve(animation, now)
 
-	setTransform(animation, "BodyMotor", CFrame.new(0, -impact * 0.12, 0) * CFrame.Angles(0, stride * 0.06, stride * 0.025))
-	setTransform(animation, "HeadMotor", CFrame.Angles(-attack * 0.12, -stride * 0.05, 0))
-	setTransform(animation, "LeftLeg", CFrame.Angles(stride * 0.42, 0, 0))
-	setTransform(animation, "RightLeg", CFrame.Angles(-stride * 0.42, 0, 0))
-	setTransform(animation, "LeftArm", CFrame.Angles(-stride * 0.3 - attack * 1.05, 0, -0.08))
-	setTransform(animation, "RightArm", CFrame.Angles(stride * 0.3 - attack * 1.05, 0, 0.08))
+	local idleBreath = math.sin(now * 1.35 + animation.phaseOffset) * 0.018
+	setTransform(
+		animation,
+		"BodyMotor",
+		CFrame.new(0, idleBreath, -attack * 0.32) * CFrame.Angles(attack * 0.24, stride * 0.08, stride * 0.03)
+	)
+	setTransform(animation, "HeadMotor", CFrame.Angles(-attack * 0.3, -stride * 0.08, 0))
+	setTransform(
+		animation,
+		"LeftLeg",
+		CFrame.new(0, leftLift * 0.24, stride * 0.12) * CFrame.Angles(stride * 0.66, 0, 0)
+	)
+	setTransform(
+		animation,
+		"RightLeg",
+		CFrame.new(0, rightLift * 0.24, -stride * 0.12) * CFrame.Angles(-stride * 0.66, 0, 0)
+	)
+	setTransform(
+		animation,
+		"LeftArm",
+		CFrame.new(0, 0, -attack * 0.24) * CFrame.Angles(-stride * 0.42 - attack * 1.35, 0, -0.1)
+	)
+	setTransform(
+		animation,
+		"RightArm",
+		CFrame.new(0, 0, -attack * 0.24) * CFrame.Angles(stride * 0.42 - attack * 1.35, 0, 0.1)
+	)
 end
 
 local function updateHover(animation, isMoving, now)
@@ -70,10 +116,14 @@ local function updateHover(animation, isMoving, now)
 	local pulse = math.sin(phase)
 	local attack = attackCurve(animation, now)
 
-	setTransform(animation, "CoreMotor", CFrame.new(0, pulse * 0.2, -attack * 0.35) * CFrame.Angles(0, phase * 0.22, pulse * 0.05))
+	setTransform(
+		animation,
+		"CoreMotor",
+		CFrame.new(0, pulse * 0.16, -attack * 0.5) * CFrame.Angles(attack * 0.22, phase * 0.22, pulse * 0.05)
+	)
 	for index = 1, 3 do
 		local angle = phase * (0.7 + index * 0.12) + (index - 1) * math.pi * 2 / 3
-		local radius = 0.28 + attack * 0.38
+		local radius = 0.28 + attack * 0.62
 		setTransform(
 			animation,
 			"Orbit" .. index,

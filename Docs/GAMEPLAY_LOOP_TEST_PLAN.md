@@ -23,7 +23,7 @@ Validate that the wave survival loop remains stable after each task and does not
 | SMK-13 | Ghost enemy cleanup | Detach a living enemy Humanoid after all spawns finish | Invalid state is pruned and the wave resolves |
 | SMK-14 | Authorized mob load controls | Click `Spawn 1`, `Spawn 10`, and `Spawn 100` in Combat Studio or as an authorized published user | Requested moving enemies spawn; tester remains alive; unauthorized users have no panel |
 | SMK-15 | Gunner unlimited ammunition | Fire ranged weapons continuously and press `R` | Shots do not stop, no ammo HUD appears, and reload does not run |
-| SMK-16 | Procedural enemy previews | Use the `Shardling`, `Moss Brute`, and `Ember Wisp` debug buttons | Each dedicated template spawns, moves, and plays its distinct procedural locomotion/attack style |
+| SMK-16 | Enemy animation comparison | Use the `Shardling`, `Moss Brute`, `Ember Wisp`, and `Animated Troll (tracks)` debug buttons | Each template spawns and moves; procedural limbs visibly cycle without whole-root ground bob, and Troll plays its walk/attack AnimationTracks |
 
 ## Automated Studio Tests
 
@@ -42,7 +42,7 @@ Validate that the wave survival loop remains stable after each task and does not
 - `CombatHudControllerTests`: `34` assertions for weapon/ammo state, XP and health formatting, shop/skills payloads, blocking UI, and revive transitions.
 - `CombatFeedbackControllerTests`: `18` assertions for hit routing, marker colors/lifetime, damage-number projection/text/lifetime, invalid payloads, and cleanup.
 - `WeaponAnimationControllerTests`: `17` assertions for track caching, ranged speed, melee cooldown scaling, scheduled stops, and invalid definitions.
-- `ProceduralEnemyAnimatorTests`: `21` assertions for style capture, 30 Hz throttling, locomotion transforms, attack poses, orbit offsets, and reset behavior.
+- `ProceduralEnemyAnimatorTests`: `25` assertions for style capture, 30 Hz throttling, locomotion transforms, attack lunges, orbit offsets, and reset behavior.
 - Play Mode baseline: Medium solo Wave 1 reports budget `8`, alive cap `14`, spawn interval `0.29`, and creates `8` enemies.
 - Factory baseline: every Wave 1 enemy has a root, Humanoid, and health bar; killing all enemies advances to `Intermission`.
 - Revive baseline: solo death creates one downed marker and changes `WaveState` to `WipeWindow`; a fresh Combat boot reports all fourteen suites passing.

@@ -56,6 +56,10 @@ function ProceduralEnemyAnimatorTests.Run()
 	equal(ProceduralEnemyAnimator.Update(scuttle, true, 10.01, 12), false, "scuttle update throttled")
 	equal(ProceduralEnemyAnimator.TriggerAttack(scuttle, 11, 0.4), true, "scuttle attack triggered")
 	equal(scuttle.attackEndsAt, 11.4, "scuttle attack duration")
+	scuttle.nextUpdateAt = 0
+	ProceduralEnemyAnimator.Update(scuttle, false, 11.2, 12)
+	equal(scuttle.motors.MandibleLeft.Transform ~= CFrame.identity, true, "scuttle mandible attack animated")
+	equal(scuttle.motors.BodyMotor.Transform.Position.Z < -0.1, true, "scuttle attack lunges through body motor")
 
 	local stompRig = buildRig({ "BodyMotor", "HeadMotor", "LeftLeg", "RightLeg", "LeftArm", "RightArm" })
 	local stomp = ProceduralEnemyAnimator.Capture(stompRig, "Stomp")
@@ -65,12 +69,17 @@ function ProceduralEnemyAnimatorTests.Run()
 	stomp.nextUpdateAt = 0
 	ProceduralEnemyAnimator.Update(stomp, false, 21.15, 5)
 	equal(stomp.motors.RightArm.Transform ~= CFrame.identity, true, "stomp attack animated")
+	equal(stomp.motors.BodyMotor.Transform.Position.Z < -0.1, true, "stomp attack lunges through body motor")
 
 	local hoverRig = buildRig({ "CoreMotor", "Orbit1", "Orbit2", "Orbit3" })
 	local hover = ProceduralEnemyAnimator.Capture(hoverRig, "Hover")
 	equal(ProceduralEnemyAnimator.Update(hover, false, 30, 4), true, "hover updated")
 	equal(hover.motors.CoreMotor.Transform ~= CFrame.identity, true, "hover core animated")
 	equal(hover.motors.Orbit1.Transform ~= hover.motors.Orbit2.Transform, true, "hover shards offset")
+	ProceduralEnemyAnimator.TriggerAttack(hover, 31, 0.4)
+	hover.nextUpdateAt = 0
+	ProceduralEnemyAnimator.Update(hover, false, 31.2, 4)
+	equal(hover.motors.CoreMotor.Transform.Position.Z < -0.2, true, "hover attack lunges through core motor")
 
 	ProceduralEnemyAnimator.Reset(scuttle)
 	equal(scuttle.motors.LegFrontLeft.Transform, CFrame.identity, "scuttle reset")
