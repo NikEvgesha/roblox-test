@@ -26,9 +26,11 @@ Validate that the wave survival loop remains stable after each task and does not
 
 ## Automated Studio Tests
 
-- Combat Studio runs `GameRulesTests` automatically.
-- Passing state: `Workspace.GameRulesTestsPassed == true`.
-- Current suite: `26` assertions for party rewards, XP progression, difficulty/stat scaling, respawn timing, meta costs, and ability upgrades.
+- Combat Studio runs `GameRulesTests` and `WaveDirectorTests` automatically.
+- Passing state: `Workspace.GameRulesTestsPassed == true` and `Workspace.WaveDirectorTestsPassed == true`.
+- `GameRulesTests`: `26` assertions for party rewards, XP progression, difficulty/stat scaling, respawn timing, meta costs, and ability upgrades.
+- `WaveDirectorTests`: `19` assertions for wave lookup, boss cadence, spawn budgets, party/difficulty scaling, alive caps, spawn intervals, and variant weights.
+- Play Mode baseline: Medium solo Wave 1 reports budget `8`, alive cap `14`, spawn interval `0.29`, and creates `8` enemies.
 
 ## Regression Matrix
 

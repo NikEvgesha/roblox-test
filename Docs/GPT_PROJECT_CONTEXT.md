@@ -117,6 +117,8 @@ src/shared
 - Gunner magazines and reload are disabled through `Ammo.MagazinesEnabled = false`; ranged shots still use profession resources where configured.
 - Shared `GameRules` owns pure reward split, XP, scaling, respawn, meta cost, and ability-upgrade calculations used by runtime code.
 - Combat Studio automatically runs `GameRulesTests`; the current suite covers 26 assertions and reports through `Workspace.GameRulesTestsPassed`.
+- Server `WaveDirector` owns wave-table selection, boss detection, spawn budgets, alive caps, spawn cadence, and enemy variant weights.
+- Combat Studio automatically runs `WaveDirectorTests`; the current suite covers 19 assertions and reports through `Workspace.WaveDirectorTestsPassed`.
 - `ReceiptRouter` is the sole owner of `MarketplaceService.ProcessReceipt`; revive products register handlers instead of replacing the callback.
 
 Важно: часть docs и task board устарели. Актуальный дизайн теперь в `GDD_V2.md`.

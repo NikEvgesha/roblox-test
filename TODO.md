@@ -1,6 +1,6 @@
 # TODO - Heroic Survival
 
-Last updated: `2026-07-19`
+Last updated: `2026-07-20`
 
 ## Snapshot
 
@@ -15,7 +15,7 @@ Last updated: `2026-07-19`
 
 1. The ghost-enemy wave stall fix is published but still needs one full Wave 10 retest.
 2. Developer Product receipts exist but need a controlled live purchase test.
-3. Core runtime scripts are oversized; core reward/scaling/progression/ability calculations now have automated coverage.
+3. Core runtime scripts are oversized; rule and wave-director calculations now have automated coverage.
 
 ## Next Queue
 
@@ -24,9 +24,11 @@ Last updated: `2026-07-19`
 | Done | Publish the ghost-enemy fix to Combat | You | Published owner load-test build includes the wave fix |
 | P0 | Retest Wave 10 completion | You + Assistant | Boss and all mobs die, run resolves, players return to Lobby |
 | P0 | Confirm Combat access | You | Maximum visitors `8`; `Secure within Universe only` |
-| Done | Add pure logic test modules | Assistant | `GameRulesTests` passes 26 assertions in Combat Studio |
+| Done | Add pure logic test modules | Assistant | `GameRulesTests` passes 26 assertions and `WaveDirectorTests` passes 19 assertions in Combat Studio |
 | Done | Centralize Developer Product receipts | Assistant | `ReceiptRouter` is the only owner of `MarketplaceService.ProcessReceipt` |
-| P1 | Extract wave director services | Assistant | `zombies.server.lua` is split without behavior regression |
+| Done | Extract wave director services | Assistant | `WaveDirector` owns wave selection, budgets, caps, cadence, and variant weights; Play Mode baseline verified |
+| P1 | Extract enemy runtime service | Assistant | Enemy spawn, lifecycle, targeting, and cleanup leave `zombies.server.lua` without behavior regression |
+| P1 | Extract revive runtime service | Assistant | Death, free respawn, and paid revive flow leave `zombies.server.lua` without behavior regression |
 | P1 | Extract combat client controllers | Assistant | Input, weapons, spectator, and UI concerns are separated |
 | P2 | Select retained enemy/weapon assets | You | Explicit keep/remove list for Combat hierarchy |
 | P2 | Clean and profile Combat assets | Assistant | Unused pack content removed; scene metrics recorded |
