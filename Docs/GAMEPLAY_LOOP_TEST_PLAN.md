@@ -26,14 +26,16 @@ Validate that the wave survival loop remains stable after each task and does not
 
 ## Automated Studio Tests
 
-- Combat Studio runs `GameRulesTests`, `WaveDirectorTests`, `EnemyRuntimeTests`, and `EnemyFactoryTests` automatically.
+- Combat Studio runs `GameRulesTests`, `WaveDirectorTests`, `EnemyRuntimeTests`, `EnemyFactoryTests`, and `ReviveRuntimeTests` automatically.
 - Passing state: all corresponding `Workspace.*TestsPassed` attributes are `true`.
 - `GameRulesTests`: `26` assertions for party rewards, XP progression, difficulty/stat scaling, respawn timing, meta costs, and ability upgrades.
 - `WaveDirectorTests`: `19` assertions for wave lookup, boss cadence, spawn budgets, party/difficulty scaling, alive caps, spawn intervals, and variant weights.
 - `EnemyRuntimeTests`: `18` assertions for registration, alive-state pruning, cleanup, nearest-target lookup, spawn-point safety, iteration, and full clear.
 - `EnemyFactoryTests`: `41` assertions for fallback/template construction, scaling, state fields, health UI, callbacks, boss data, and animation cleanup.
+- `ReviveRuntimeTests`: `47` assertions for death tokens, escalating free timers, markers, stale-timer rejection, teammate revive, wipe policy, team grant, timeout, and run cleanup.
 - Play Mode baseline: Medium solo Wave 1 reports budget `8`, alive cap `14`, spawn interval `0.29`, and creates `8` enemies.
 - Factory baseline: every Wave 1 enemy has a root, Humanoid, and health bar; killing all enemies advances to `Intermission`.
+- Revive baseline: solo death creates one downed marker and changes `WaveState` to `WipeWindow`; a fresh Combat boot reports all five suites passing.
 - Ghost-state baseline: destroying one live enemy root and killing the remaining wave enemies produces `AliveZombies == 0` and advances to `Intermission`.
 
 ## Regression Matrix

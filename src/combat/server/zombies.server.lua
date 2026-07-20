@@ -13,6 +13,7 @@ local profileStore = require(sharedFolder:WaitForChild("ProfileStore"))
 local receiptRouter = require(script.Parent:WaitForChild("ReceiptRouter"))
 local EnemyFactory = require(script.Parent:WaitForChild("EnemyFactory"))
 local EnemyRuntime = require(script.Parent:WaitForChild("EnemyRuntime"))
+local ReviveRuntime = require(script.Parent:WaitForChild("ReviveRuntime"))
 local WaveDirector = require(script.Parent:WaitForChild("WaveDirector"))
 
 local zombieConfig = combatConfig.Zombies
@@ -208,13 +209,8 @@ local startSpawn = ensureStartSpawn()
 
 local enemyFactory
 local enemyRuntime
-local playerStates = {}
-local wipeState = {
-	active = false,
-	token = 0,
-	endsAt = 0,
-}
-local clearReviveOptions
+local reviveRuntime
+local endMatch
 
 local function cleanupEnemyState(state)
 	if enemyFactory then
@@ -484,12 +480,6 @@ local function applyTeleportRunConfigFromPlayer(player)
 	return changed
 end
 
-local function getFreeRespawnSecondsForDeath(deathCount)
-	local base = tonumber(zombieConfig.FreeRespawnBaseSeconds) or 10
-	local increment = tonumber(zombieConfig.FreeRespawnIncrementSeconds) or 10
-	return gameRules.GetFreeRespawnSeconds(deathCount, base, increment)
-end
-
 local function awardZombieKillToParty(rewardMoney, rewardXP)
 	local players = Players:GetPlayers()
 	local count = #players
@@ -519,21 +509,7 @@ local function awardBossCrystalsToParty(baseCrystals)
 end
 
 local function getPlayerState(player)
-	local state = playerStates[player]
-	if state then
-		return state
-	end
-
-	state = {
-		alive = false,
-		downed = false,
-		deathToken = 0,
-		deathCount = 0,
-		downedMarker = nil,
-		runsCountedRunId = 0,
-	}
-	playerStates[player] = state
-	return state
+	return reviveRuntime:GetState(player)
 end
 
 local function ensureRunParticipationStat(player)
@@ -556,24 +532,6 @@ local function ensureRunParticipationStat(player)
 
 	addAchievementStat(player, "RunsPlayed", 1)
 	state.runsCountedRunId = matchState.runId
-end
-
-local function removeDownedMarker(player)
-	local state = getPlayerState(player)
-	if state.downedMarker and state.downedMarker.Parent then
-		state.downedMarker:Destroy()
-	end
-	state.downedMarker = nil
-end
-
-local function clearAllDownedMarkers()
-	for _, player in ipairs(Players:GetPlayers()) do
-		removeDownedMarker(player)
-	end
-
-	for _, child in ipairs(downedFolder:GetChildren()) do
-		child:Destroy()
-	end
 end
 
 local function clearAllZombies()
@@ -646,23 +604,7 @@ local function placeCharacterAtStart(character)
 end
 
 local function getLiveTargetFromPlayer(player)
-	local state = playerStates[player]
-	if not state or not state.alive or state.downed then
-		return nil, nil
-	end
-
-	local character = player.Character
-	if not character then
-		return nil, nil
-	end
-
-	local humanoid = character:FindFirstChildOfClass("Humanoid")
-	local root = character:FindFirstChild("HumanoidRootPart")
-	if not humanoid or humanoid.Health <= 0 or not root or not root:IsA("BasePart") then
-		return nil, nil
-	end
-
-	return humanoid, root
+	return reviveRuntime:GetLiveTarget(player)
 end
 
 enemyRuntime = EnemyRuntime.new({
@@ -677,14 +619,7 @@ enemyRuntime = EnemyRuntime.new({
 })
 
 local function countAlivePlayers()
-	local count = 0
-	for _, player in ipairs(Players:GetPlayers()) do
-		local humanoid = getLiveTargetFromPlayer(player)
-		if humanoid then
-			count += 1
-		end
-	end
-	return count
+	return reviveRuntime:CountAlivePlayers()
 end
 
 local function getNearestPlayer(position)
@@ -1010,6 +945,50 @@ local function updateWaveDebugAttributes()
 	setWaveDebugAttribute("SpawnInterval", spawnInterval)
 end
 
+reviveRuntime = ReviveRuntime.new({
+	config = zombieConfig,
+	downedFolder = downedFolder,
+	startSpawn = startSpawn,
+	getPlayers = function()
+		return Players:GetPlayers()
+	end,
+	isMatchEnded = function()
+		return matchState.ended
+	end,
+	getRunId = function()
+		return matchState.runId
+	end,
+	endMatch = function(reason)
+		endMatch(reason)
+	end,
+	safeLoadCharacter = safeLoadCharacter,
+	sendToPlayer = sendSurvivalEventToPlayer,
+	broadcast = broadcastSurvivalEvent,
+	restoreWaveState = function(forcedState)
+		if forcedState then
+			Workspace:SetAttribute("WaveState", forcedState)
+		elseif matchState.waveActive then
+			Workspace:SetAttribute(
+				"WaveState",
+				waveDirector:IsBossWave(matchState.waveNumber) and "BossWaveActive" or "WaveActive"
+			)
+		elseif matchState.intermissionEndsAt > 0 then
+			Workspace:SetAttribute("WaveState", "Intermission")
+		else
+			Workspace:SetAttribute("WaveState", "PreRun")
+		end
+		updateWaveDebugAttributes()
+	end,
+	onCharacterReady = function(player, character)
+		ensureDebugLoadTestProtection(player, character)
+		task.defer(function()
+			placeCharacterAtStart(character)
+		end)
+	end,
+	soloPrice = soloReviveRobux,
+	teamPrice = teamReviveRobux,
+})
+
 local function startWave(waveNumber)
 	local totalSpawns, bossSpawns =
 		waveDirector:ComputeSpawnBudget(waveNumber, #Players:GetPlayers(), getDifficultyConfig())
@@ -1065,7 +1044,7 @@ local function updateWaveDirector(now)
 		return
 	end
 
-	if wipeState.active then
+	if reviveRuntime:IsWipeActive() then
 		return
 	end
 
@@ -1112,10 +1091,6 @@ local function startNewMatch()
 	matchState.intermissionEndsAt = 0
 	matchState.nextSpawnAt = 0
 	matchState.intermissionSecondLastSent = -1
-	wipeState.active = false
-	wipeState.endsAt = 0
-	wipeState.token += 1
-
 	local difficultyKey = getDifficultyKey()
 
 	Workspace:SetAttribute("SurvivalState", "Running")
@@ -1132,16 +1107,9 @@ local function startNewMatch()
 	})
 
 	clearAllZombies()
-	clearAllDownedMarkers()
-	clearReviveOptions()
+	reviveRuntime:ResetRun()
 
 	for _, player in ipairs(Players:GetPlayers()) do
-		local state = getPlayerState(player)
-		state.alive = false
-		state.downed = false
-		state.deathCount = 0
-		state.deathToken += 1
-		state.runsCountedRunId = 0
 		ensureRunParticipationStat(player)
 		safeLoadCharacter(player)
 	end
@@ -1163,16 +1131,14 @@ local function getReturnDelayForReason(reason)
 	return math.max(0, tonumber(zombieConfig.ReturnToLobbyDelayAfterWipe) or fallback)
 end
 
-local function endMatch(reason)
+endMatch = function(reason)
 	if matchState.ended then
 		return
 	end
 
 	local returnDelay = getReturnDelayForReason(reason)
 	matchState.ended = true
-	wipeState.active = false
-	wipeState.endsAt = 0
-	wipeState.token += 1
+	reviveRuntime:EndRun()
 	Workspace:SetAttribute("SurvivalState", "GameOver")
 	Workspace:SetAttribute("SurvivalReason", reason or "All players down")
 	Workspace:SetAttribute("IsBossWave", false)
@@ -1194,13 +1160,6 @@ local function endMatch(reason)
 	})
 
 	clearAllZombies()
-	clearAllDownedMarkers()
-
-	for _, state in pairs(playerStates) do
-		state.alive = false
-		state.downed = false
-		state.deathToken += 1
-	end
 	local currentRunId = matchState.runId
 	task.delay(returnDelay, function()
 		if matchState.runId ~= currentRunId then
@@ -1225,181 +1184,14 @@ local function endMatch(reason)
 	end)
 end
 
-clearReviveOptions = function()
-	broadcastSurvivalEvent({
-		type = "revive_options_clear",
-	})
-end
-
-local function canUseWipeWindow()
-	return wipeState.active and os.clock() <= wipeState.endsAt
-end
-
-local function beginWipeWindow()
-	if wipeState.active or matchState.ended then
-		return
-	end
-
-	wipeState.active = true
-	wipeState.token += 1
-	local wipeToken = wipeState.token
-	local duration = tonumber(zombieConfig.WipePurchaseWindowSeconds) or 30
-	wipeState.endsAt = os.clock() + duration
-	Workspace:SetAttribute("WaveState", "WipeWindow")
-
-	broadcastSurvivalEvent({
-		type = "match",
-		text = ("All players are down. Buy revive in %ds or run ends."):format(duration),
-	})
-	broadcastSurvivalEvent({
-		type = "revive_options",
-		canSolo = true,
-		canTeam = true,
-		soloPrice = soloReviveRobux,
-		teamPrice = teamReviveRobux,
-		seconds = duration,
-		wipeOnly = true,
-	})
-
-	task.spawn(function()
-		for secondsLeft = duration, 1, -1 do
-			if matchState.ended or wipeState.token ~= wipeToken or not wipeState.active then
-				return
-			end
-
-			broadcastSurvivalEvent({
-				type = "wipe_timer",
-				seconds = secondsLeft,
-				text = ("Team wipe. Buy revive in %ds."):format(secondsLeft),
-			})
-			task.wait(1)
-		end
-
-		if matchState.ended or wipeState.token ~= wipeToken or not wipeState.active then
-			return
-		end
-
-		if countAlivePlayers() <= 0 then
-			endMatch("All players died")
-		end
-	end)
-end
-
-local function revivePlayer(player, reasonText)
-	if not player or not player.Parent then
-		return
-	end
-
-	local state = getPlayerState(player)
-	state.deathToken += 1
-	state.alive = false
-	state.downed = false
-	removeDownedMarker(player)
-
-	sendSurvivalEventToPlayer(player, {
-		type = "respawn_clear",
-		text = reasonText or "Respawning...",
-	})
-	sendSurvivalEventToPlayer(player, {
-		type = "revive_options_clear",
-	})
-
-	safeLoadCharacter(player)
-
-	if wipeState.active and countAlivePlayers() > 0 then
-		wipeState.active = false
-		wipeState.endsAt = 0
-		wipeState.token += 1
-		clearReviveOptions()
-
-		if matchState.waveActive then
-			Workspace:SetAttribute(
-				"WaveState",
-				waveDirector:IsBossWave(matchState.waveNumber) and "BossWaveActive" or "WaveActive"
-			)
-		elseif matchState.intermissionEndsAt > 0 then
-			Workspace:SetAttribute("WaveState", "Intermission")
-		else
-			Workspace:SetAttribute("WaveState", "PreRun")
-		end
-		updateWaveDebugAttributes()
-	end
-end
-
-local function canRequestSoloRevive(player)
-	if matchState.ended then
-		return false
-	end
-
-	local state = getPlayerState(player)
-	if not state.downed then
-		return false
-	end
-
-	if wipeState.active then
-		return canUseWipeWindow()
-	end
-
-	return true
-end
-
-local function canRequestTeamRevive(player)
-	if matchState.ended then
-		return false
-	end
-
-	local state = getPlayerState(player)
-	if not state.downed then
-		return false
-	end
-
-	return canUseWipeWindow()
-end
-
-local function grantTeamRevive(player)
-	if not canRequestTeamRevive(player) then
-		return false
-	end
-
-	local revivedCount = 0
-	for _, target in ipairs(Players:GetPlayers()) do
-		local targetState = getPlayerState(target)
-		if targetState.downed then
-			revivePlayer(target, "Team revive purchased")
-			revivedCount += 1
-		end
-	end
-
-	if revivedCount > 0 then
-		broadcastSurvivalEvent({
-			type = "match",
-			text = ("%s used team revive. Revived %d players."):format(player.Name, revivedCount),
-		})
-	end
-	return revivedCount > 0
-end
-
-local function grantSoloRevive(player)
-	if not canRequestSoloRevive(player) then
-		return false
-	end
-
-	revivePlayer(player, "Solo revive purchased")
-	broadcastSurvivalEvent({
-		type = "match",
-		text = ("%s used solo revive."):format(player.Name),
-	})
-	return true
-end
-
 local function promptRevivePurchase(player, kind)
 	local productId = kind == "team" and teamReviveProductId or soloReviveProductId
 
 	if RunService:IsStudio() and productId <= 0 then
 		if kind == "team" then
-			grantTeamRevive(player)
+			reviveRuntime:GrantTeamRevive(player)
 		else
-			grantSoloRevive(player)
+			reviveRuntime:GrantSoloRevive(player)
 		end
 		return
 	end
@@ -1420,189 +1212,8 @@ local function promptRevivePurchase(player, kind)
 	end
 end
 
-local function createDownedMarker(player, deathToken, position)
-	removeDownedMarker(player)
-
-	local marker = Instance.new("Part")
-	marker.Name = ("Downed_%s"):format(player.Name)
-	marker.Size = Vector3.new(2.5, 0.6, 2.5)
-	marker.Material = Enum.Material.Neon
-	marker.Color = Color3.fromRGB(210, 88, 88)
-	marker.Anchored = true
-	marker.CanCollide = false
-	marker.CanTouch = false
-	marker.CanQuery = true
-	marker.Position = position + Vector3.new(0, 1, 0)
-	marker.Parent = downedFolder
-
-	local prompt = Instance.new("ProximityPrompt")
-	prompt.ActionText = "Revive"
-	prompt.ObjectText = player.Name
-	prompt.RequiresLineOfSight = false
-	prompt.MaxActivationDistance = 10
-	prompt.HoldDuration = 1.25
-	prompt.Parent = marker
-
-	local state = getPlayerState(player)
-	state.downedMarker = marker
-
-	prompt.Triggered:Connect(function(reviver)
-		if reviver == player or matchState.ended or wipeState.active then
-			return
-		end
-
-		local currentState = getPlayerState(player)
-		if currentState.deathToken ~= deathToken or not currentState.downed then
-			return
-		end
-
-		local reviverHumanoid = getLiveTargetFromPlayer(reviver)
-		if not reviverHumanoid then
-			return
-		end
-
-		if countAlivePlayers() <= 0 then
-			return
-		end
-
-		broadcastSurvivalEvent({
-			type = "match",
-			text = ("%s revived %s."):format(reviver.Name, player.Name),
-		})
-		revivePlayer(player, "Revived by teammate")
-	end)
-end
-
-local function handlePlayerDeath(player, character)
-	if matchState.ended then
-		return
-	end
-
-	local state = getPlayerState(player)
-	if not state.alive then
-		return
-	end
-
-	state.alive = false
-	state.downed = true
-	state.deathCount += 1
-	state.deathToken += 1
-	local deathToken = state.deathToken
-	local runId = matchState.runId
-
-	local deathPosition = startSpawn.Position
-	if character then
-		local root = character:FindFirstChild("HumanoidRootPart")
-		if root and root:IsA("BasePart") then
-			deathPosition = root.Position
-		end
-	end
-
-	createDownedMarker(player, deathToken, deathPosition)
-
-	if countAlivePlayers() <= 0 then
-		beginWipeWindow()
-		return
-	end
-
-	local freeRespawnSeconds = getFreeRespawnSecondsForDeath(state.deathCount)
-	sendSurvivalEventToPlayer(player, {
-		type = "respawn",
-		seconds = freeRespawnSeconds,
-		mode = "free",
-		text = ("You are down. Free respawn in %ds."):format(freeRespawnSeconds),
-	})
-	sendSurvivalEventToPlayer(player, {
-		type = "revive_options",
-		canSolo = true,
-		canTeam = false,
-		soloPrice = soloReviveRobux,
-		teamPrice = teamReviveRobux,
-		seconds = freeRespawnSeconds,
-		wipeOnly = false,
-	})
-
-	task.spawn(function()
-		for secondsLeft = freeRespawnSeconds, 1, -1 do
-			if matchState.runId ~= runId or matchState.ended then
-				return
-			end
-
-			local currentState = getPlayerState(player)
-			if currentState.deathToken ~= deathToken or not currentState.downed then
-				return
-			end
-
-			if wipeState.active then
-				return
-			end
-
-			sendSurvivalEventToPlayer(player, {
-				type = "respawn",
-				seconds = secondsLeft,
-				mode = "free",
-			})
-			task.wait(1)
-		end
-	end)
-
-	task.delay(freeRespawnSeconds, function()
-		if matchState.runId ~= runId or matchState.ended then
-			return
-		end
-
-		local currentState = getPlayerState(player)
-		if currentState.deathToken ~= deathToken or not currentState.downed then
-			return
-		end
-
-		if wipeState.active then
-			return
-		end
-
-		revivePlayer(player, "Free respawn")
-	end)
-end
-local function onCharacterAdded(player, character)
-	local state = getPlayerState(player)
-	state.alive = true
-	state.downed = false
-	state.deathToken += 1
-	removeDownedMarker(player)
-	ensureDebugLoadTestProtection(player, character)
-
-	if wipeState.active and countAlivePlayers() > 0 then
-		wipeState.active = false
-		wipeState.endsAt = 0
-		wipeState.token += 1
-		clearReviveOptions()
-	end
-
-	sendSurvivalEventToPlayer(player, {
-		type = "respawn_clear",
-		text = "",
-	})
-	sendSurvivalEventToPlayer(player, {
-		type = "revive_options_clear",
-	})
-
-	task.defer(function()
-		placeCharacterAtStart(character)
-	end)
-
-	local humanoid = character:FindFirstChildOfClass("Humanoid") or character:WaitForChild("Humanoid", 5)
-	if humanoid then
-		humanoid.Died:Connect(function()
-			handlePlayerDeath(player, character)
-		end)
-	end
-end
-
 local function setupPlayer(player)
-	local state = getPlayerState(player)
-	state.alive = false
-	state.downed = false
-	state.deathToken += 1
+	reviveRuntime:PreparePlayer(player)
 	applyTeleportRunConfigFromPlayer(player)
 	ensureLeaderstats(player)
 	ensureProgression(player)
@@ -1619,11 +1230,11 @@ local function setupPlayer(player)
 	end
 
 	player.CharacterAdded:Connect(function(character)
-		onCharacterAdded(player, character)
+		reviveRuntime:OnCharacterAdded(player, character)
 	end)
 
 	if player.Character then
-		onCharacterAdded(player, player.Character)
+		reviveRuntime:OnCharacterAdded(player, player.Character)
 	end
 
 	if not matchState.ended then
@@ -1634,16 +1245,11 @@ local function setupPlayer(player)
 end
 
 local function cleanupPlayer(player)
-	removeDownedMarker(player)
-	playerStates[player] = nil
-
-	if not matchState.ended and #Players:GetPlayers() > 0 and countAlivePlayers() <= 0 then
-		beginWipeWindow()
-	end
+	reviveRuntime:CleanupPlayer(player)
 end
 
 local function spawnZombieFromPoint()
-	if matchState.ended or wipeState.active then
+	if matchState.ended or reviveRuntime:IsWipeActive() then
 		return
 	end
 
@@ -1732,26 +1338,26 @@ end)
 
 revivePurchaseEvent.OnServerEvent:Connect(function(player, action)
 	if action == "request_solo" then
-		if canRequestSoloRevive(player) then
+		if reviveRuntime:CanRequestSoloRevive(player) then
 			promptRevivePurchase(player, "solo")
 		end
 		return
 	end
 
 	if action == "request_team" then
-		if canRequestTeamRevive(player) then
+		if reviveRuntime:CanRequestTeamRevive(player) then
 			promptRevivePurchase(player, "team")
 		end
 	end
 end)
 
 receiptRouter.RegisterProduct(soloReviveProductId, function(_, player)
-	grantSoloRevive(player)
+	reviveRuntime:GrantSoloRevive(player)
 	return true
 end)
 
 receiptRouter.RegisterProduct(teamReviveProductId, function(_, player)
-	grantTeamRevive(player)
+	reviveRuntime:GrantTeamRevive(player)
 	return true
 end)
 
@@ -1870,7 +1476,7 @@ task.spawn(function()
 			task.wait(0.25)
 		else
 			local now = os.clock()
-			if matchState.waveActive and not wipeState.active and matchState.waveSpawnsRemaining > 0 then
+			if matchState.waveActive and not reviveRuntime:IsWipeActive() and matchState.waveSpawnsRemaining > 0 then
 				if now >= matchState.nextSpawnAt then
 					local ok, err = pcall(spawnZombieFromPoint)
 					if not ok then
