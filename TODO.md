@@ -15,7 +15,7 @@ Last updated: `2026-07-20`
 
 1. The ghost-enemy wave stall fix is published but still needs one full Wave 10 retest.
 2. Developer Product receipts exist but need a controlled live purchase test.
-3. Core runtime scripts are oversized; rules, wave direction, and enemy lifecycle now have automated coverage.
+3. Core runtime scripts are oversized; rules, waves, enemy lifecycle, and enemy creation now have automated coverage.
 
 ## Next Queue
 
@@ -24,11 +24,11 @@ Last updated: `2026-07-20`
 | Done | Publish the ghost-enemy fix to Combat | You | Published owner load-test build includes the wave fix |
 | P0 | Retest Wave 10 completion | You + Assistant | Boss and all mobs die, run resolves, players return to Lobby |
 | P0 | Confirm Combat access | You | Maximum visitors `8`; `Secure within Universe only` |
-| Done | Add pure logic test modules | Assistant | Combat Studio passes `GameRulesTests` 26, `WaveDirectorTests` 19, and `EnemyRuntimeTests` 18 assertions |
+| Done | Add pure logic test modules | Assistant | Combat Studio passes rules 26, waves 19, enemy runtime 18, and enemy factory 41 assertions |
 | Done | Centralize Developer Product receipts | Assistant | `ReceiptRouter` is the only owner of `MarketplaceService.ProcessReceipt` |
 | Done | Extract wave director services | Assistant | `WaveDirector` owns wave selection, budgets, caps, cadence, and variant weights; Play Mode baseline verified |
 | Done | Extract enemy runtime service | Assistant | Registry, lifecycle, targeting, spawn-point selection, and ghost cleanup are isolated and Play Mode verified |
-| P1 | Extract enemy factory | Assistant | Model/template creation, animation loading, health UI, and death callbacks leave `zombies.server.lua` without behavior regression |
+| Done | Extract enemy factory | Assistant | Template/fallback creation, animation loading, health UI, and death callbacks are isolated and Play Mode verified |
 | P1 | Extract revive runtime service | Assistant | Death, free respawn, and paid revive flow leave `zombies.server.lua` without behavior regression |
 | P1 | Extract combat client controllers | Assistant | Input, weapons, spectator, and UI concerns are separated |
 | P2 | Select retained enemy/weapon assets | You | Explicit keep/remove list for Combat hierarchy |

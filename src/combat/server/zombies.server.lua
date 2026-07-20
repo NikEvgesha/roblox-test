@@ -5,13 +5,13 @@ local Workspace = game:GetService("Workspace")
 local Debris = game:GetService("Debris")
 local MarketplaceService = game:GetService("MarketplaceService")
 local TeleportService = game:GetService("TeleportService")
-local KeyframeSequenceProvider = game:GetService("KeyframeSequenceProvider")
 
 local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local combatConfig = require(sharedFolder:WaitForChild("CombatConfig"))
 local gameRules = require(sharedFolder:WaitForChild("GameRules"))
 local profileStore = require(sharedFolder:WaitForChild("ProfileStore"))
 local receiptRouter = require(script.Parent:WaitForChild("ReceiptRouter"))
+local EnemyFactory = require(script.Parent:WaitForChild("EnemyFactory"))
 local EnemyRuntime = require(script.Parent:WaitForChild("EnemyRuntime"))
 local WaveDirector = require(script.Parent:WaitForChild("WaveDirector"))
 
@@ -206,6 +206,7 @@ end
 
 local startSpawn = ensureStartSpawn()
 
+local enemyFactory
 local enemyRuntime
 local playerStates = {}
 local wipeState = {
@@ -214,11 +215,10 @@ local wipeState = {
 	endsAt = 0,
 }
 local clearReviveOptions
-local cleanupZombieAnimationTracks
 
 local function cleanupEnemyState(state)
-	if cleanupZombieAnimationTracks then
-		cleanupZombieAnimationTracks(state)
+	if enemyFactory then
+		enemyFactory:CleanupAnimationTracks(state)
 	elseif state and state.animationTracks then
 		for _, track in pairs(state.animationTracks) do
 			if track then
@@ -518,18 +518,6 @@ local function awardBossCrystalsToParty(baseCrystals)
 	end
 end
 
-local function colorFromRgbArray(rgbArray, fallback)
-	if type(rgbArray) ~= "table" then
-		return fallback
-	end
-
-	return Color3.fromRGB(
-		tonumber(rgbArray[1]) or math.floor(fallback.R * 255 + 0.5),
-		tonumber(rgbArray[2]) or math.floor(fallback.G * 255 + 0.5),
-		tonumber(rgbArray[3]) or math.floor(fallback.B * 255 + 0.5)
-	)
-end
-
 local function getPlayerState(player)
 	local state = playerStates[player]
 	if state then
@@ -780,60 +768,6 @@ local function findHumanoidFromPart(part)
 
 	return model:FindFirstChildOfClass("Humanoid"), model
 end
-local function attachZombieHealthBar(zombieModel, humanoid, head, title)
-	local healthGui = Instance.new("BillboardGui")
-	healthGui.Name = "ZombieHealthGui"
-	healthGui.Size = UDim2.fromOffset(140, 24)
-	healthGui.StudsOffsetWorldSpace = Vector3.new(0, 3, 0)
-	healthGui.AlwaysOnTop = true
-	healthGui.MaxDistance = 180
-	healthGui.Adornee = head
-	healthGui.Parent = zombieModel
-
-	local bg = Instance.new("Frame")
-	bg.Name = "Background"
-	bg.Size = UDim2.fromScale(1, 1)
-	bg.BackgroundColor3 = Color3.fromRGB(24, 24, 24)
-	bg.BorderSizePixel = 0
-	bg.Parent = healthGui
-
-	local bgCorner = Instance.new("UICorner")
-	bgCorner.CornerRadius = UDim.new(0, 7)
-	bgCorner.Parent = bg
-
-	local fill = Instance.new("Frame")
-	fill.Name = "Fill"
-	fill.Size = UDim2.fromScale(1, 1)
-	fill.BackgroundColor3 = Color3.fromRGB(88, 214, 115)
-	fill.BorderSizePixel = 0
-	fill.Parent = bg
-
-	local fillCorner = Instance.new("UICorner")
-	fillCorner.CornerRadius = UDim.new(0, 7)
-	fillCorner.Parent = fill
-
-	local label = Instance.new("TextLabel")
-	label.Name = "Text"
-	label.BackgroundTransparency = 1
-	label.Size = UDim2.fromScale(1, 1)
-	label.Font = Enum.Font.GothamBold
-	label.TextSize = 12
-	label.TextColor3 = Color3.fromRGB(240, 240, 240)
-	label.TextStrokeTransparency = 0.55
-	label.Text = title
-	label.Parent = bg
-
-	local function updateBar()
-		local maxHealth = math.max(1, humanoid.MaxHealth)
-		local ratio = math.clamp(humanoid.Health / maxHealth, 0, 1)
-		fill.Size = UDim2.fromScale(ratio, 1)
-		label.Text = ("%s %d/%d"):format(title, math.ceil(humanoid.Health), math.floor(maxHealth))
-	end
-
-	humanoid.HealthChanged:Connect(updateBar)
-	updateBar()
-end
-
 local function spawnSpitProjectile(state, targetPosition)
 	local origin = state.root.Position + Vector3.new(0, 1.4, 0)
 	local direction = targetPosition - origin
@@ -940,23 +874,6 @@ local function explodeZombie(state)
 	state.humanoid:TakeDamage(state.humanoid.MaxHealth * 5)
 end
 
-local function resolveGroundY(position)
-	local rayParams = RaycastParams.new()
-	rayParams.FilterType = Enum.RaycastFilterType.Blacklist
-	rayParams.FilterDescendantsInstances = { zombiesFolder, spawnPointsFolder, downedFolder }
-
-	local rayOrigin = position + Vector3.new(0, 40, 0)
-	local rayDirection = Vector3.new(0, -180, 0)
-	local result = Workspace:Raycast(rayOrigin, rayDirection, rayParams)
-	if result then
-		return result.Position.Y
-	end
-
-	return position.Y
-end
-
-local zombieTemplateCache = {}
-
 local function sanitizeTemplateZombieContent(model)
 	for _, inst in ipairs(model:GetDescendants()) do
 		if inst:IsA("Script") or inst:IsA("LocalScript") or inst:IsA("ModuleScript") then
@@ -971,538 +888,39 @@ local function sanitizeTemplateZombieContent(model)
 	end
 end
 
-local function findZombieTemplate(templateName)
-	if type(templateName) ~= "string" or templateName == "" then
-		return nil
-	end
-
-	local cached = zombieTemplateCache[templateName]
-	if cached and cached.Parent then
-		return cached
-	end
-
-	local function isUsableTemplateModel(inst)
-		if not inst or not inst:IsA("Model") then
-			return false
-		end
-
-		local hasBasePart = inst:FindFirstChildWhichIsA("BasePart", true)
-		local hasHumanoid = inst:FindFirstChildOfClass("Humanoid")
-		return hasBasePart ~= nil and hasHumanoid ~= nil
-	end
-
-	local enemyFolder = Workspace:FindFirstChild("Enemy")
-	if enemyFolder then
-		for _, inst in ipairs(enemyFolder:GetDescendants()) do
-			if inst:IsA("Model") and inst.Name == templateName and isUsableTemplateModel(inst) then
-				zombieTemplateCache[templateName] = inst
-				return inst
-			end
-		end
-	end
-
-	for _, inst in ipairs(Workspace:GetDescendants()) do
-		if inst:IsA("Model") and inst.Name == templateName then
-			if isUsableTemplateModel(inst)
-				and not inst:IsDescendantOf(zombiesFolder)
-				and not inst:IsDescendantOf(downedFolder)
-			then
-				zombieTemplateCache[templateName] = inst
-				return inst
-			end
-		end
-	end
-
-	return nil
-end
-
-local function findTemplateRootPart(model)
-	local root = model:FindFirstChild("HumanoidRootPart", true)
-	if root and root:IsA("BasePart") then
-		return root
-	end
-
-	local primaryPart = model.PrimaryPart
-	if primaryPart and primaryPart:IsA("BasePart") then
-		return primaryPart
-	end
-
-	return model:FindFirstChildWhichIsA("BasePart", true)
-end
-
-local function findFirstNamedKeyframeSequence(root, names)
-	if not root or type(names) ~= "table" then
-		return nil
-	end
-
-	local sequences = {}
-	for _, desc in ipairs(root:GetDescendants()) do
-		if desc:IsA("KeyframeSequence") then
-			table.insert(sequences, desc)
-		end
-	end
-
-	for _, wantedName in ipairs(names) do
-		local wanted = string.lower(tostring(wantedName))
-		for _, sequence in ipairs(sequences) do
-			if string.lower(sequence.Name) == wanted then
-				return sequence
-			end
-		end
-	end
-
-	for _, wantedName in ipairs(names) do
-		local wanted = string.lower(tostring(wantedName))
-		for _, sequence in ipairs(sequences) do
-			if string.find(string.lower(sequence.Name), wanted, 1, true) then
-				return sequence
-			end
-		end
-	end
-
-	return nil
-end
-
-local function findFirstNamedAnimation(root, names)
-	if not root or type(names) ~= "table" then
-		return nil
-	end
-
-	local animations = {}
-	for _, desc in ipairs(root:GetDescendants()) do
-		if desc:IsA("Animation") then
-			local animationId = tostring(desc.AnimationId or "")
-			if animationId ~= "" then
-				table.insert(animations, desc)
-			end
-		end
-	end
-
-	for _, wantedName in ipairs(names) do
-		local wanted = string.lower(tostring(wantedName))
-		for _, animation in ipairs(animations) do
-			if string.lower(animation.Name) == wanted then
-				return animation
-			end
-		end
-	end
-
-	for _, wantedName in ipairs(names) do
-		local wanted = string.lower(tostring(wantedName))
-		for _, animation in ipairs(animations) do
-			if string.find(string.lower(animation.Name), wanted, 1, true) then
-				return animation
-			end
-		end
-	end
-
-	return nil
-end
-
-local function loadTrackFromKeyframeSequence(animator, sequence, looped, priority)
-	if not animator or not sequence then
-		return nil
-	end
-
-	local okRegister, registeredId = pcall(function()
-		return KeyframeSequenceProvider:RegisterKeyframeSequence(sequence)
-	end)
-	if not okRegister or type(registeredId) ~= "string" or registeredId == "" then
-		return nil
-	end
-
-	local animation = Instance.new("Animation")
-	animation.AnimationId = registeredId
-	local okLoad, track = pcall(function()
-		return animator:LoadAnimation(animation)
-	end)
-	animation:Destroy()
-
-	if not okLoad or not track then
-		return nil
-	end
-
-	track.Looped = looped == true
-	track.Priority = priority or Enum.AnimationPriority.Movement
-	return track
-end
-
-local function loadTrackFromAnimation(animator, sourceAnimation, looped, priority)
-	if not animator or not sourceAnimation or not sourceAnimation:IsA("Animation") then
-		return nil
-	end
-
-	local animationId = tostring(sourceAnimation.AnimationId or "")
-	if animationId == "" then
-		return nil
-	end
-
-	local animation = Instance.new("Animation")
-	animation.AnimationId = animationId
-	local okLoad, track = pcall(function()
-		return animator:LoadAnimation(animation)
-	end)
-	animation:Destroy()
-
-	if not okLoad or not track then
-		return nil
-	end
-
-	track.Looped = looped == true
-	track.Priority = priority or Enum.AnimationPriority.Movement
-	return track
-end
-
-local function buildZombieAnimationTracks(zombie, humanoid)
-	local animSaves = zombie:FindFirstChild("AnimSaves", true)
-
-	local animator = humanoid:FindFirstChildOfClass("Animator")
-	if not animator then
-		animator = Instance.new("Animator")
-		animator.Parent = humanoid
-	end
-
-	local keyframeRoot = animSaves or zombie
-
-	local tracks = {
-		idle = loadTrackFromAnimation(
-			animator,
-			findFirstNamedAnimation(zombie, { "Idle", "IdleAnim", "ToolNoneAnim", "Stand", "Breath" }),
-			true,
-			Enum.AnimationPriority.Movement
-		) or loadTrackFromKeyframeSequence(
-			animator,
-			findFirstNamedKeyframeSequence(keyframeRoot, { "Idle" }),
-			true,
-			Enum.AnimationPriority.Movement
-		),
-		walk = loadTrackFromAnimation(
-			animator,
-			findFirstNamedAnimation(zombie, { "WalkAnim", "RunAnim", "Walk", "Run" }),
-			true,
-			Enum.AnimationPriority.Movement
-		) or loadTrackFromKeyframeSequence(
-			animator,
-			findFirstNamedKeyframeSequence(keyframeRoot, { "Walk", "Run", "CursedGolemWalk" }),
-			true,
-			Enum.AnimationPriority.Movement
-		),
-		attack = loadTrackFromAnimation(
-			animator,
-			findFirstNamedAnimation(zombie, { "Attack", "AttackAnim", "Hit", "Slash", "Stab" }),
-			false,
-			Enum.AnimationPriority.Action
-		) or loadTrackFromKeyframeSequence(
-			animator,
-			findFirstNamedKeyframeSequence(keyframeRoot, { "Attack", "Hit", "Slash" }),
-			false,
-			Enum.AnimationPriority.Action
-		),
-	}
-
-	if not tracks.idle and not tracks.walk and not tracks.attack then
-		return nil
-	end
-
-	return tracks
-end
-
-local function prepareTemplateZombieModel(position, variant, variantKey, health, moveSpeed)
-	local template = findZombieTemplate(variant.TemplateModelName)
-	if not template then
-		return nil, nil, nil, nil, nil
-	end
-
-	local zombie = template:Clone()
-	sanitizeTemplateZombieContent(zombie)
-
-	local humanoid = zombie:FindFirstChildOfClass("Humanoid")
-	if not humanoid then
-		humanoid = Instance.new("Humanoid")
-		humanoid.Name = "Humanoid"
-		humanoid.Parent = zombie
-	end
-
-	humanoid.MaxHealth = health
-	humanoid.Health = health
-	humanoid.WalkSpeed = moveSpeed
-	humanoid.AutoRotate = false
-	humanoid.BreakJointsOnDeath = false
-	humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
-
-	local root = findTemplateRootPart(zombie)
-	if not root then
-		zombie:Destroy()
-		return nil, nil, nil, nil, nil
-	end
-
-	if root.Name ~= "HumanoidRootPart" then
-		local syntheticRoot = Instance.new("Part")
-		syntheticRoot.Name = "HumanoidRootPart"
-		syntheticRoot.Size = Vector3.new(2, 2, 1)
-		syntheticRoot.Transparency = 1
-		syntheticRoot.Anchored = true
-		syntheticRoot.CanCollide = false
-		syntheticRoot.CanTouch = false
-		syntheticRoot.CanQuery = true
-		syntheticRoot.CFrame = root.CFrame
-		syntheticRoot.Parent = zombie
-
-		local weld = Instance.new("WeldConstraint")
-		weld.Part0 = syntheticRoot
-		weld.Part1 = root
-		weld.Parent = syntheticRoot
-		root = syntheticRoot
-	end
-
-	local templateScale = tonumber(variant.TemplateScale)
-	if templateScale and templateScale > 0 then
-		pcall(function()
-			zombie:ScaleTo(templateScale)
-		end)
-	end
-
-	for _, inst in ipairs(zombie:GetDescendants()) do
-		if inst:IsA("BasePart") then
-			inst.Anchored = inst == root
-			inst.CanCollide = false
-			inst.CanTouch = false
-			inst.CanQuery = true
-			inst.Massless = true
-			if inst == root then
-				inst.Transparency = 1
-			end
-		end
-	end
-
-	local head = zombie:FindFirstChild("Head", true)
-	if not (head and head:IsA("BasePart")) then
-		head = root
-	end
-
-	local _, boundsSize = zombie:GetBoundingBox()
-	local groundY = resolveGroundY(position)
-	local yOffset = boundsSize.Y * 0.5 + 0.1 + (variant.FlyHeight or 0)
-	local spawnPosition = Vector3.new(position.X, groundY + yOffset, position.Z)
-
-	zombie.Name = "Zombie_" .. variantKey
-	zombie:SetAttribute("IsZombie", true)
-	zombie:SetAttribute("ZombieVariant", variantKey)
-	zombie.PrimaryPart = root
-	zombie:PivotTo(CFrame.lookAt(spawnPosition, spawnPosition + Vector3.new(0, 0, -1)))
-
-	return zombie, humanoid, root, head, nil
-end
-
-local function createZombie(position, variantKey, stage)
-	local variant = variantConfig[variantKey] or variantConfig.Walker
-	variantKey = variantConfig[variantKey] and variantKey or "Walker"
-
-	local multipliers = getDifficultyMultipliers()
-	local health = gameRules.GetScaledValue(zombieConfig.BaseHealth, zombieConfig.HealthScalePerStage, stage, (variant.HealthMul or 1) * multipliers.health)
-	local moveSpeed = gameRules.GetScaledValue(zombieConfig.BaseMoveSpeed, zombieConfig.SpeedScalePerStage, stage, variant.MoveSpeedMul or 1)
-	local attackDamage = gameRules.GetScaledValue(zombieConfig.BaseAttackDamage, zombieConfig.DamageScalePerStage, stage, (variant.DamageMul or 1) * multipliers.damage)
-	local rewardMoney = gameRules.GetScaledValue(zombieConfig.BaseRewardMoney, zombieConfig.RewardScalePerStage, stage, (variant.RewardMul or 1) * multipliers.reward)
-	local rewardXP = gameRules.GetScaledValue(zombieConfig.BaseRewardXP, zombieConfig.RewardScalePerStage, stage, (variant.RewardMul or 1) * multipliers.reward)
-	local attackRange = zombieConfig.BaseAttackRange
-	local attackCooldown = math.max(0.35, zombieConfig.BaseAttackCooldown / (1 + stage * 0.02))
-
-	local bodyScaleY = variant.ScaleY or 1
-	local torsoColor = colorFromRgbArray(variant.Color, Color3.fromRGB(77, 142, 74))
-	local headColor = colorFromRgbArray(variant.HeadColor, Color3.fromRGB(101, 170, 95))
-
-	local isFlyerVariant = variant.IsFlyer == true or variantKey == "Flyer"
-	local isSpitterVariant = variant.IsSpitter == true or variantKey == "Spitter"
-	local isBomberVariant = variant.IsBomber == true or variantKey == "Bomber"
-
-	local zombie, humanoid, root, head, animationTracks =
-		prepareTemplateZombieModel(position, variant, variantKey, health, moveSpeed)
-
-	if not zombie then
-		zombie = Instance.new("Model")
-		zombie.Name = "Zombie_" .. variantKey
-		zombie:SetAttribute("IsZombie", true)
-		zombie:SetAttribute("ZombieVariant", variantKey)
-
-		humanoid = Instance.new("Humanoid")
-		humanoid.Name = "Humanoid"
-		humanoid.MaxHealth = health
-		humanoid.Health = health
-		humanoid.WalkSpeed = moveSpeed
-		humanoid.AutoRotate = false
-		humanoid.BreakJointsOnDeath = false
-		humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
-		humanoid.Parent = zombie
-
-		root = Instance.new("Part")
-		root.Name = "HumanoidRootPart"
-		root.Size = Vector3.new(2, 2, 1)
-		root.Transparency = 1
-		root.Anchored = true
-		root.CanCollide = false
-		root.CanTouch = false
-		root.CanQuery = true
-		root.Parent = zombie
-
-		local torso = Instance.new("Part")
-		torso.Name = "Torso"
-		torso.Size = Vector3.new(2.4, 2.6 * bodyScaleY, 1.4)
-		torso.Material = Enum.Material.SmoothPlastic
-		torso.Color = torsoColor
-		torso.Anchored = true
-		torso.CanCollide = true
-		torso.Parent = zombie
-
-		head = Instance.new("Part")
-		head.Name = "Head"
-		head.Size = Vector3.new(2, 1.2 * bodyScaleY, 1.2)
-		head.Material = Enum.Material.SmoothPlastic
-		head.Color = headColor
-		head.Anchored = true
-		head.CanCollide = true
-		head.Parent = zombie
-
-		local face = Instance.new("Decal")
-		face.Name = "face"
-		face.Face = Enum.NormalId.Front
-		face.Texture = "rbxasset://textures/face.png"
-		face.Parent = head
-
-		local rootToTorso = Instance.new("WeldConstraint")
-		rootToTorso.Part0 = root
-		rootToTorso.Part1 = torso
-		rootToTorso.Parent = torso
-
-		local rootToHead = Instance.new("WeldConstraint")
-		rootToHead.Part0 = root
-		rootToHead.Part1 = head
-		rootToHead.Parent = head
-
-		local groundY = resolveGroundY(position)
-		local baseYOffset = torso.Size.Y * 0.5 + 0.1
-		local yOffset = baseYOffset + (variant.FlyHeight or 0)
-		root.CFrame = CFrame.new(position.X, groundY + yOffset, position.Z)
-		torso.CFrame = root.CFrame
-		head.CFrame = root.CFrame * CFrame.new(0, 1.8 * bodyScaleY, 0)
-
-		zombie.PrimaryPart = root
-	end
-
-	if isFlyerVariant then
-		local leftWing = Instance.new("Part")
-		leftWing.Name = "LeftWing"
-		leftWing.Size = Vector3.new(0.2, 1.2, 3.2)
-		leftWing.Material = Enum.Material.Neon
-		leftWing.Color = Color3.fromRGB(173, 164, 255)
-		leftWing.CanCollide = false
-		leftWing.Massless = true
-		leftWing.Parent = zombie
-
-		local rightWing = leftWing:Clone()
-		rightWing.Name = "RightWing"
-		rightWing.Parent = zombie
-
-		leftWing.CFrame = root.CFrame * CFrame.new(-1.3, 0.1, 0)
-		rightWing.CFrame = root.CFrame * CFrame.new(1.3, 0.1, 0)
-
-		local weldLeft = Instance.new("WeldConstraint")
-		weldLeft.Part0 = root
-		weldLeft.Part1 = leftWing
-		weldLeft.Parent = leftWing
-
-		local weldRight = Instance.new("WeldConstraint")
-		weldRight.Part0 = root
-		weldRight.Part1 = rightWing
-		weldRight.Parent = rightWing
-	end
-
-	zombie.Parent = zombiesFolder
-	zombie:SetAttribute("IsBossZombie", variant.IsBoss == true)
-
-	if not animationTracks then
-		animationTracks = buildZombieAnimationTracks(zombie, humanoid)
-	end
-
-	attachZombieHealthBar(zombie, humanoid, head, variant.DisplayName or variantKey)
-
-	local state = {
-		model = zombie,
-		humanoid = humanoid,
-		root = root,
-		animationTracks = animationTracks,
-		variantKey = variantKey,
-		variant = variant,
-		moveSpeed = moveSpeed,
-		attackDamage = attackDamage,
-		attackRange = attackRange,
-		attackCooldown = attackCooldown,
-		rewardMoney = rewardMoney,
-		rewardXP = rewardXP,
-		bossCrystals = math.max(0, math.floor((variant.BossCrystalDrop or 0) * multipliers.crystal + 0.5)),
-		lastAttack = 0,
-		lastSpit = 0,
-		dead = false,
-		exploded = false,
-		isFlyer = isFlyerVariant,
-		isSpitter = isSpitterVariant,
-		isBomber = isBomberVariant,
-		spitRange = variant.SpitRange or 0,
-		spitDamage = (variant.SpitDamage or 0) * (1 + stage * zombieConfig.DamageScalePerStage) * multipliers.damage,
-		spitCooldown = variant.SpitCooldown or 0,
-		spitProjectileSpeed = variant.SpitProjectileSpeed or 0,
-		explosionRange = variant.ExplosionRange or 0,
-		explosionDamage = (variant.ExplosionDamage or 0) * (1 + stage * zombieConfig.DamageScalePerStage) * multipliers.damage,
-		explosionTriggerRange = variant.ExplosionTriggerRange or 0,
-		flyHeight = variant.FlyHeight or 0,
-		isBoss = variant.IsBoss == true,
-		visualPhase = math.random() * math.pi * 2,
-		attackAnimDuration = 0.24,
-		attackAnimStartedAt = 0,
-		attackAnimEndsAt = 0,
-		lastMoveAnimated = false,
-	}
-
-	enemyRuntime:Register(zombie, state)
-
-	local function handleZombieDeath()
-		if state.dead then
+enemyFactory = EnemyFactory.new({
+	config = zombieConfig,
+	variants = variantConfig,
+	enemyFolder = zombiesFolder,
+	spawnPointsFolder = spawnPointsFolder,
+	downedFolder = downedFolder,
+	getDifficultyMultipliers = getDifficultyMultipliers,
+	sanitizeTemplateContent = sanitizeTemplateZombieContent,
+	onCreated = function(model, state)
+		enemyRuntime:Register(model, state)
+	end,
+	onKilled = function(state)
+		if matchState.ended then
 			return
 		end
 
-		state.dead = true
-		humanoid.Health = 0
-		if not matchState.ended then
-			awardZombieKillToParty(state.rewardMoney, state.rewardXP)
-			if state.isBoss then
-				for _, player in ipairs(Players:GetPlayers()) do
-					addAchievementStat(player, "BossKills", 1)
-				end
-			end
-			if state.bossCrystals > 0 then
-				awardBossCrystalsToParty(state.bossCrystals)
+		awardZombieKillToParty(state.rewardMoney, state.rewardXP)
+		if state.isBoss then
+			for _, player in ipairs(Players:GetPlayers()) do
+				addAchievementStat(player, "BossKills", 1)
 			end
 		end
-
-		enemyRuntime:Remove(zombie)
-		task.delay(2, function()
-			if zombie.Parent then
-				zombie:Destroy()
-			end
-		end)
-	end
-
-	humanoid.Died:Connect(handleZombieDeath)
-	humanoid.HealthChanged:Connect(function(currentHealth)
-		if currentHealth <= 0 then
-			handleZombieDeath()
+		if state.bossCrystals > 0 then
+			awardBossCrystalsToParty(state.bossCrystals)
 		end
-	end)
+	end,
+	onRemoved = function(model)
+		enemyRuntime:Remove(model)
+	end,
+})
 
-	zombie.AncestryChanged:Connect(function(_, parent)
-		if not parent then
-			enemyRuntime:Remove(zombie)
-		end
-	end)
+local function createZombie(position, variantKey, stage)
+	return enemyFactory:Create(position, variantKey, stage)
 end
 local function ensureSpawnPoint(name, position)
 	local point = spawnPointsFolder:FindFirstChild(name)
@@ -2444,23 +1862,6 @@ local function buildZombiePoseCFrame(state, basePosition, lookForward, isMoving,
 	local roll = math.sin(state.visualPhase * 1.3) * (isMoving and 0.02 or 0.008)
 	local adjustedPosition = basePosition + Vector3.new(0, bobOffset, 0) + lookForward * lungeDistance
 	return CFrame.lookAt(adjustedPosition, adjustedPosition + lookForward) * CFrame.Angles(pitch, 0, roll)
-end
-
-cleanupZombieAnimationTracks = function(state)
-	if not state or not state.animationTracks then
-		return
-	end
-
-	for _, track in pairs(state.animationTracks) do
-		if track then
-			pcall(function()
-				track:Stop(0.05)
-				track:Destroy()
-			end)
-		end
-	end
-
-	state.animationTracks = nil
 end
 
 task.spawn(function()
